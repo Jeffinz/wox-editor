@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.0.0
+// @version      3.1.0
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -9,7 +9,7 @@
 // ==/UserScript==
 (function () {
   'use strict';
-  const VERSION = '3.0.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.1.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, SIM = null, MJ = null, EVENTS = [];
 
@@ -28,92 +28,112 @@
   };
 
   // สีและฟอนต์อิงจากธีมของเกม (jade / paper / cinnabar) ให้แผงดูเป็นส่วนเดียวกับเกม
-  const CSS = `
+  const STYLE = `
     :host { all: initial; }
     * { box-sizing: border-box; }
+    /* ธีม Jade Ink: มืดเป็นค่าเริ่มต้น สว่างตามระบบ (paper/jade/cinnabar ของเกม) */
     .w {
-      --paper:#e9efea; --surface:#f6f9f6; --ink:#1d2724; --muted:#5e6f69; --line:#c9d6cf;
-      --jade:#2c6b59; --jade-d:#1f4f42; --cinnabar:#a8352a; --gold:#8f6a12; --ok:#2c7a3d;
-      --hover:#e1ede6; --press:#cfe0d6;
+      --bg:#14201d; --surface:#1b2b27; --raised:#243a34; --field:#101a17;
+      --ink:#e6efeb; --muted:#9bb0a8; --line:#34504a; --line-strong:#5f8277;
+      --jade:#4fa58a; --jade-h:#66b89e; --on-jade:#0c1a16;
+      --cinnabar:#ef8478; --ok:#5fc07a; --focus:#8fe0c6;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
+      --sp-1:4px; --sp-2:8px; --sp-3:12px; --ctl:34px; --r:8px;
       position: fixed; top: 12px; right: 12px; z-index: 2147483647;
-      width: min(348px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
-      display: flex; flex-direction: column;
-      background: var(--surface); color: var(--ink);
-      border: 1px solid var(--line); border-radius: 10px;
-      box-shadow: 0 8px 28px rgba(29,39,36,.22);
+      width: min(356px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
+      display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg); color: var(--ink);
+      border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
       font: 13px/1.5 var(--font-body, system-ui, "Noto Sans Thai", "Segoe UI", sans-serif);
     }
+    @media (prefers-color-scheme: light) {
+      .w {
+        --bg:#e9efea; --surface:#f6f9f6; --raised:#e1ede6; --field:#fbfdfb;
+        --ink:#1d2724; --muted:#53645e; --line:#c9d6cf; --line-strong:#6f877d;
+        --jade:#2c6b59; --jade-h:#1f4f42; --on-jade:#fff;
+        --cinnabar:#a8352a; --ok:#2c7a3d; --focus:#2c6b59;
+        --shadow:0 8px 28px rgba(29,39,36,.22);
+      }
+    }
+    @media (pointer: coarse) { .w { --ctl:44px; } }
     .w[data-min="1"] { width: auto; max-height: none; }
     .w[data-min="1"] .body, .w[data-min="1"] .tabs { display: none; }
     .w[data-min="1"] .ttl span { display: none; }
-    header { cursor: grab; touch-action: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+    header { cursor: grab; touch-action: none; display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: var(--surface); border-bottom: 1px solid var(--line); }
     .w[data-min="1"] header { border-bottom: 0; }
-    .ttl { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; flex: 1; font-family: var(--font-display, inherit); }
     header.drag { cursor: grabbing; }
+    .ttl { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; font-family: var(--font-display, inherit); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--cinnabar); flex: none; }
     .dot.on { background: var(--ok); }
-    .st { font-size: 12px; color: var(--muted); font-weight: 400; }
-    .tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); }
+    .st { font-size: 12px; color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ver { font: 11px/1 ui-monospace, Consolas, monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; }
+    .tabs { display: flex; gap: 2px; padding: 0 var(--sp-2); background: var(--surface); border-bottom: 1px solid var(--line); }
     .tabs button {
-      flex: 1; padding: 7px 4px; border: 1px solid transparent; border-bottom: 0; background: none;
-      border-radius: 7px 7px 0 0; color: var(--muted); font: inherit; cursor: pointer; min-height: 36px;
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
+      min-height: var(--ctl); padding: 0 4px; border: 0; border-bottom: 2px solid transparent; background: none;
+      color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap;
     }
-    .tabs button:hover { background: var(--hover); color: var(--ink); }
-    .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); font-weight: 700; border-color: var(--line); margin-bottom: -1px; box-shadow: inset 0 -2px 0 var(--jade); }
-    .body { overflow: auto; padding: 10px; }
-    section { margin: 0 0 14px; }
+    .tabs button svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .tabs button:hover { color: var(--ink); background: var(--raised); }
+    .tabs button[aria-selected="true"] { color: var(--jade); border-bottom-color: var(--jade); font-weight: 700; }
+    .body { overflow: auto; padding: var(--sp-3); scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+    section { margin: 0 0 var(--sp-2); padding: var(--sp-1) var(--sp-3) var(--sp-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
     section:last-child { margin-bottom: 0; }
-    h3 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--jade-d); }
-    summary { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 6px; margin: 0 -6px 4px; border-radius: 6px; cursor: pointer; list-style: none; font-weight: 700; color: var(--jade-d); user-select: none; }
+    h3 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--jade); }
+    summary { display: flex; align-items: center; gap: 6px; min-height: var(--ctl); margin: 0 calc(var(--sp-1) * -1); padding: 0 var(--sp-1); border-radius: 6px; cursor: pointer; list-style: none; font-weight: 700; color: var(--jade); user-select: none; }
     summary::-webkit-details-marker { display: none; }
-    summary::before { content: "▸"; font-size: 11px; color: var(--muted); width: 10px; }
-    details[open] > summary::before { content: "▾"; }
-    summary:hover { background: var(--hover); }
+    summary::before { content: ""; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); margin: 0 4px 0 2px; transition: transform .15s ease; }
+    details[open] > summary::before { transform: rotate(45deg); }
+    summary:hover { background: var(--raised); }
     #hbag { max-height: 240px; overflow: auto; }
-    .chk { display: flex; align-items: center; gap: 8px; min-height: 34px; cursor: pointer; }
-    .chk input { width: auto; min-height: 0; }
-    .hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+    .chk { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--ctl); cursor: pointer; }
+    .chk input { width: 16px; min-height: 0; accent-color: var(--jade); }
+    .hint { color: var(--muted); font-size: 12px; margin: var(--sp-1) 0 0; }
     .row { display: grid; grid-template-columns: 1fr 84px auto; gap: 6px; align-items: center; margin-bottom: 5px; }
     .row.two { grid-template-columns: 1fr auto; }
-    .row > label, .field > label { color: var(--ink); }
     .field { display: grid; gap: 3px; margin-bottom: 7px; }
+    .field > label { color: var(--muted); font-size: 12px; }
+    .row > label { color: var(--ink); }
     .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     input, select {
-      width: 100%; min-height: 34px; padding: 4px 8px; font: inherit; color: var(--ink);
-      background: #fbfdfb; border: 1px solid #9fb1a8; border-radius: 6px;
+      width: 100%; min-height: var(--ctl); padding: 4px var(--sp-2); font: inherit; color: var(--ink);
+      background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px;
     }
+    input::placeholder { color: var(--muted); }
     select[size] { padding: 2px; }
-    select[size] option { padding: 5px 8px; border-radius: 4px; }
+    select[size] option { padding: 5px var(--sp-2); border-radius: 4px; }
+    select option { background: var(--field); color: var(--ink); }
     input[type=number] { font-variant-numeric: tabular-nums; }
     button.b {
-      min-height: 34px; padding: 4px 12px; font: inherit; cursor: pointer; color: var(--ink);
-      background: #fbfdfb; border: 1px solid #6f877d; border-radius: 6px; white-space: nowrap;
+      min-height: var(--ctl); padding: 4px var(--sp-3); font: inherit; cursor: pointer; color: var(--ink);
+      background: var(--raised); border: 1px solid var(--line-strong); border-radius: 6px; white-space: nowrap;
+      transition: background-color .15s ease, border-color .15s ease;
     }
-    button.b:hover { background: var(--hover); }
-    button.b:active { background: var(--press); }
-    button.b.pri { background: var(--jade); border-color: var(--jade-d); color: #fff; font-weight: 700; }
-    button.b.pri:hover { background: var(--jade-d); }
-    button.b.dng { color: var(--cinnabar); border-color: #c58f89; }
-    button.b.dng:hover { background: #f6e6e3; }
+    button.b:hover { border-color: var(--jade); }
+    button.b:active { background: var(--line); }
+    button.b.pri { background: var(--jade); border-color: var(--jade); color: var(--on-jade); font-weight: 700; }
+    button.b.pri:hover { background: var(--jade-h); border-color: var(--jade-h); }
+    button.b.dng { color: var(--cinnabar); border-color: var(--cinnabar); }
     button.b.wide { width: 100%; }
-    .ico { min-width: 34px; padding: 4px 8px; background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer; color: var(--muted); font: inherit; }
-    .ico:hover { background: var(--hover); color: var(--ink); }
-    :focus-visible { outline: 2px solid var(--jade); outline-offset: 1px; }
+    .ico { min-width: var(--ctl); min-height: var(--ctl); padding: 4px var(--sp-2); background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer; color: var(--muted); font: inherit; }
+    .ico:hover { background: var(--raised); color: var(--ink); }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
     .bagrow { display: grid; grid-template-columns: 1fr 70px auto auto; gap: 6px; align-items: center; margin-bottom: 5px; }
     .bagrow .nm { overflow-wrap: anywhere; }
-    .aibadge { position: fixed; z-index: 2147483000; pointer-events: none; padding: 1px 6px; border-radius: 10px; font: 700 12px/1.5 system-ui, sans-serif; white-space: nowrap; background: #e9efea; color: #5e6f69; box-shadow: 0 0 0 1px #c9d6cf; }
+    .aibadge { position: fixed; z-index: 2147483000; pointer-events: none; padding: 1px 6px; border-radius: 10px; font: 700 12px/1.5 system-ui, sans-serif; white-space: nowrap; background: #e9efea; color: #53645e; box-shadow: 0 0 0 1px #c9d6cf; }
     .aibadge.best { background: #2c6b59; color: #fff; box-shadow: none; }
-    .rdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; box-shadow: 0 0 0 1px var(--line); }
+    .rdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; box-shadow: 0 0 0 1px var(--line-strong); }
     .rtxt { color: var(--muted); font-size: 11px; }
-    .empty { color: var(--muted); padding: 8px 0; }
-    .desc { background: var(--paper); border-radius: 6px; padding: 8px 10px; margin: 6px 0; color: var(--ink); min-height: 40px; }
-    .toast { position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--ink); color: #f6f9f6; padding: 8px 12px; border-radius: 6px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+    .empty { color: var(--muted); padding: var(--sp-2) 0; }
+    .desc { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: var(--sp-2) 10px; margin: 6px 0; color: var(--ink); min-height: 40px; }
+    .toast { position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--jade); color: var(--on-jade); font-weight: 600; padding: var(--sp-2) var(--sp-3); border-radius: 6px; font-size: 12.5px; box-shadow: var(--shadow); }
     .toast[hidden] { display: none; }
-    .toast.err { background: var(--cinnabar); }
+    .toast.err { background: var(--cinnabar); color: var(--on-jade); }
     #hchk, #hupd { white-space: pre-wrap; font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--ink); margin: 6px 0; overflow-wrap: anywhere; }
     #hupd:empty { display: none; }
     [hidden] { display: none !important; }
     @media (prefers-reduced-motion: no-preference) { .toast { animation: tin .15s ease-out; } @keyframes tin { from { opacity: 0; transform: translateY(4px); } } }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   `;
 
   addEventListener('DOMContentLoaded', () => {
@@ -121,17 +141,17 @@
     const root = host.attachShadow({ mode: 'open' });
     const $ = (id) => root.getElementById(id);
     root.innerHTML = `
-      <style>${CSS}</style>
+      <style>${STYLE}</style>
       <div class="w" id="w" role="region" aria-label="WoX Editor">
         <header>
-          <div class="ttl"><i class="dot" id="dot"></i><b>WoX Editor</b><span class="st" id="hs">รอข้อมูลเกม</span></div>
+          <div class="ttl"><i class="dot" id="dot"></i><b>WoX Editor</b><span class="ver">v${VERSION}</span><span class="st" id="hs">รอข้อมูลเกม</span></div>
           <button class="ico" id="hx" aria-expanded="true" aria-label="ย่อแผง" title="ย่อ/ขยาย">▾</button>
         </header>
         <div class="tabs" role="tablist">
-          <button role="tab" data-tab="main" aria-selected="true">ค่าหลัก</button>
-          <button role="tab" data-tab="bag" aria-selected="false">กระเป๋า</button>
-          <button role="tab" data-tab="ev" aria-selected="false">อีเว้นต์</button>
-          <button role="tab" data-tab="ai" aria-selected="false">ช่วยเลือก</button>
+          <button role="tab" data-tab="main" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg><span>ค่าหลัก</span></button>
+          <button role="tab" data-tab="bag" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 12H5L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg><span>กระเป๋า</span></button>
+          <button role="tab" data-tab="ev" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span>อีเว้นต์</span></button>
+          <button role="tab" data-tab="ai" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg><span>ช่วยเลือก</span></button>
         </div>
         <div class="body">
           <div data-pane="main">

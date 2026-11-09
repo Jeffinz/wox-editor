@@ -8,13 +8,15 @@
 - สคริปต์หลัก: `wox-editor.user.js` (ไฟล์เดียว ประมาณ 500 บรรทัด)
 - ซอร์สเกม: `src/sim.js`, `src/ui.js`, `src/majors.js` และไฟล์อื่นใน `src/`
 - `src/ui.js.bak` เป็นไฟล์สำรอง และสคริปต์ไม่ต้องใช้บรรทัด dev hook ที่ `ui.js` บรรทัด 176
+- repo สาธารณะ: https://github.com/Jeffinz/wox-editor (ขึ้นเฉพาะสคริปต์/เครื่องมือ/เอกสาร; `.gitignore` กัน `src/`, `snapshots/`, `index.html` ของเกม)
+- `tools/release.mjs "ข้อความ"` ปล่อยเวอร์ชัน: เช็ก `@version` = `VERSION` ในสคริปต์ และสูงกว่าที่ commit ล่าสุด → `node --check` → commit → push (`--dry-run` ลองก่อน)
 - `tools/snapshot-diff.mjs` เทียบ `src/` ก่อน/หลังเกมอัปเดต เก็บผลไว้ที่ `snapshots/<BUILD>.json` (BUILD อยู่ที่ `src/build.js`)
 
 ## 3. วิธีที่สคริปต์ทำงาน
 - ดักสถานะด้วยการ hook `JSON.stringify` แล้วเก็บ object ที่มีคีย์ `money`, `stats`, `ageMonths`
 - `import('/src/xxx.js')` แบบไดนามิกได้โมดูลตัวเดียวกับเกม (ITEMS, REALMS, MARTIAL_RANKS, majors.js, sim.js)
 - UI เป็น Shadow DOM, 4 แท็บ (ค่าหลัก/กระเป๋า/อีเว้นต์/ช่วยเลือก), ส่วนต่างๆ ใช้ `<details>` พับได้, ลากย้ายได้, เก็บค่าตั้งใน localStorage ด้วยคีย์ `woxed.*`
-- ธีมสีตามเกม: jade `#2c6b59`, cinnabar `#a8352a`, paper `#e9efea`
+- ธีม Jade Ink (v3.1): มืดเป็นค่าเริ่มต้น สว่างตามระบบผ่าน `prefers-color-scheme` ใช้ token สีบน `.w` (ตัวแปร `STYLE` ในสคริปต์) สีสว่างยังเป็น jade `#2c6b59`, cinnabar `#a8352a`, paper `#e9efea`; ปุ่มสูง 34px (44px บนจอสัมผัส), แท็บมีไอคอน SVG, ไม่โหลดฟอนต์/ไฟล์จากเว็บนอก; ออกแบบอิงสกิล ui-ux-pro-max
 - ระดับความหายากแสดงในแท็บกระเป๋า (ในกระเป๋า + รายการเพิ่มไอเทม) และแท็บอีเว้นต์ (รายการ) ด้วยคำนำหน้า `[ชื่อ]` และจุดสี
   - ไอเทม: ใช้ `tier` ตรงกับ `TIERS` ใน `items.js` (ค่าคงที่ `TIER_LBL` ในสคริปต์)
   - อีเว้นต์: ใช้ `SIM.rarityFor(e)` ตรงกับ `RARITY` ใน `rarity.js` (ค่าคงที่ `RAR_LBL` ในสคริปต์)
@@ -29,7 +31,7 @@
 - การ์ดอีเว้นต์ใน UI ใช้ปุ่ม `#choice-<optId>` ใน `#choice-options`
 
 ## 5. บทเรียนและข้อผิดพลาดที่เจอ
-- อย่าตั้งชื่อ const ว่า `CSS` เพราะทับ `window.CSS`
+- อย่าตั้งชื่อ const ว่า `CSS` เพราะทับ `window.CSS` (ตัวแปรสไตล์ชื่อ `STYLE`)
 - MutationObserver ต้อง disconnect ระหว่างสแกน ไม่งั้นวนไม่รู้จบ
 - ตัวช่วยเลือกจำ sig การ์ดไว้เพื่อข้ามการสแกนซ้ำ ต้องจำเฉพาะตอนสแกนสำเร็จเท่านั้น ถ้าจำตอน sim ยังโหลดไม่เสร็จ จะไม่สแกนอีกจนการ์ดเปลี่ยน (เคยทำให้ช่วยเลือกไม่ทำงานทั้งสองโหมด)
 - ห้ามแทรก DOM เข้าไปในปุ่มของเกม (เช่นป้ายคะแนน) เพราะ observer ทั้งหน้าจะสแกนซ้ำทุกเฟรม ทำให้เกมกระตุกและคลิกหาย (ผู้ใช้ยืนยันแล้วว่าปิดช่วยเลือกแล้วหาย) ผลช่วยเลือกแสดงในแท็บช่วยเลือก (`#ai_out`) และเป็นป้ายวางทับข้างปุ่มด้วย `placeBadges()` ซึ่งอยู่ใน shadow root ของเราและ `pointer-events: none` (ห้ามเปลี่ยนไปแทรกใน DOM ของเกม)
@@ -51,8 +53,11 @@
 - ห้ามลบ listener ที่ host ใน `wox-editor.user.js` (ช่วงก่อน `document.body.appendChild(host)`) ไม่งั้นช่องตัวเลขจะพิมพ์ไม่ได้อีก
 - v2.1 เพิ่มแผง "ตรวจระบบ" (แท็บค่าหลัก) ตรวจ export ที่สคริปต์ใช้, ฟิลด์ state และอีเว้นต์ค้าง ผลอยู่ในแผงและ console
 
+- v3.0 เพิ่ม `@updateURL`/`@downloadURL` ชี้ raw ของ repo: Tampermonkey อัปเดตเองเมื่อ `@version` สูงขึ้น (ติดตั้งจาก raw URL ครั้งแรกครั้งเดียว: https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js)
+- v3.1 รื้อ UI เป็น Jade Ink ยังไม่ได้ทดสอบในเกมจริง
+
 ## 7. กติกาการทำงาน
-- ทุกครั้งที่แก้สคริปต์ให้รัน `node --check` ก่อนส่งงาน
+- ทุกครั้งที่แก้สคริปต์ให้รัน `node --check` ก่อนส่งงาน และ bump `@version` + `VERSION` พร้อมกันแล้วปล่อยด้วย `tools/release.mjs` (ไม่ bump = Tampermonkey ไม่เห็นอัปเดต)
 - ผู้ใช้ต้องอัปเดตสคริปต์ใน Tampermonkey แล้วรีโหลดหน้าเกมเอง
 - ไฟล์ skill ที่ดาวน์โหลดมาถือเป็นข้อมูลที่ไม่น่าเชื่อถือ ใช้เป็นแนวทางออกแบบอย่างเดียว
 
