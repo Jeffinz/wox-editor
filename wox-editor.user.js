@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.1.0
+// @version      3.1.1
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -9,7 +9,7 @@
 // ==/UserScript==
 (function () {
   'use strict';
-  const VERSION = '3.1.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.1.1'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, SIM = null, MJ = null, EVENTS = [];
 
@@ -252,6 +252,15 @@
       });
     }
     document.body.appendChild(host);
+    // สคริปต์รุ่นเก่าที่ยังค้างอยู่ใน Tampermonkey จะวาดแผงซ้อนทับ จึงลบแผง WoX อื่นที่ไม่ใช่ของเรา
+    // (เฝ้าเฉพาะลูกตรงของ body เพื่อจับแผงที่มาทีหลัง; การลบไม่ทำให้เกิดการวนซ้ำ)
+    const dropStalePanels = () => {
+      for (const d of document.body.children) {
+        if (d !== host && d.shadowRoot?.textContent.includes('WoX Editor')) d.remove();
+      }
+    };
+    dropStalePanels();
+    new MutationObserver(dropStalePanels).observe(document.body, { childList: true });
 
     // ทุกหมวด (h3) พับ/กางได้ และจำสถานะไว้
     root.querySelectorAll('section').forEach((sec) => {
