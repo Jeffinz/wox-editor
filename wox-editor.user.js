@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.1.1
+// @version      3.2.0
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -9,7 +9,7 @@
 // ==/UserScript==
 (function () {
   'use strict';
-  const VERSION = '3.1.1'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.2.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, SIM = null, MJ = null, EVENTS = [];
 
@@ -33,11 +33,11 @@
     * { box-sizing: border-box; }
     /* ธีม Jade Ink: มืดเป็นค่าเริ่มต้น สว่างตามระบบ (paper/jade/cinnabar ของเกม) */
     .w {
-      --bg:#14201d; --surface:#1b2b27; --raised:#243a34; --field:#101a17;
-      --ink:#e6efeb; --muted:#9bb0a8; --line:#34504a; --line-strong:#5f8277;
+      --bg:#0e1715; --surface:#152320; --raised:#1d322d; --field:#0b1311;
+      --ink:#e6efeb; --muted:#9bb0a8; --line:#243a34; --line-strong:#4a6c62;
       --jade:#4fa58a; --jade-h:#66b89e; --on-jade:#0c1a16;
-      --cinnabar:#ef8478; --ok:#5fc07a; --focus:#8fe0c6;
-      --shadow:0 10px 30px rgba(0,0,0,.45);
+      --cinnabar:#ef8478; --ok:#5fc07a; --focus:#8fe0c6; --gold:#e0b252; --glow:0 0 0 3px rgba(79,165,138,.28);
+      --shadow:0 14px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
       --sp-1:4px; --sp-2:8px; --sp-3:12px; --ctl:34px; --r:8px;
       position: fixed; top: 12px; right: 12px; z-index: 2147483647;
       width: min(356px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
@@ -51,7 +51,7 @@
         --bg:#e9efea; --surface:#f6f9f6; --raised:#e1ede6; --field:#fbfdfb;
         --ink:#1d2724; --muted:#53645e; --line:#c9d6cf; --line-strong:#6f877d;
         --jade:#2c6b59; --jade-h:#1f4f42; --on-jade:#fff;
-        --cinnabar:#a8352a; --ok:#2c7a3d; --focus:#2c6b59;
+        --cinnabar:#a8352a; --ok:#2c7a3d; --focus:#2c6b59; --gold:#7a5a0e; --glow:0 0 0 3px rgba(44,107,89,.22);
         --shadow:0 8px 28px rgba(29,39,36,.22);
       }
     }
@@ -59,14 +59,14 @@
     .w[data-min="1"] { width: auto; max-height: none; }
     .w[data-min="1"] .body, .w[data-min="1"] .tabs { display: none; }
     .w[data-min="1"] .ttl span { display: none; }
-    header { cursor: grab; touch-action: none; display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: var(--surface); border-bottom: 1px solid var(--line); }
+    header { cursor: grab; touch-action: none; display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: linear-gradient(135deg, color-mix(in srgb, var(--jade) 24%, var(--surface)), var(--surface) 62%); border-bottom: 1px solid var(--line); }
     .w[data-min="1"] header { border-bottom: 0; }
     header.drag { cursor: grabbing; }
     .ttl { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; font-family: var(--font-display, inherit); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--cinnabar); flex: none; }
-    .dot.on { background: var(--ok); }
+    .dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent), 0 0 8px var(--ok); }
     .st { font-size: 12px; color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ver { font: 11px/1 ui-monospace, Consolas, monospace; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 6px; }
+    .ver { font: 11px/1 ui-monospace, Consolas, monospace; color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent); border-radius: 999px; padding: 2px 7px; }
     .tabs { display: flex; gap: 2px; padding: 0 var(--sp-2); background: var(--surface); border-bottom: 1px solid var(--line); }
     .tabs button {
       flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px;
@@ -75,12 +75,12 @@
     }
     .tabs button svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .tabs button:hover { color: var(--ink); background: var(--raised); }
-    .tabs button[aria-selected="true"] { color: var(--jade); border-bottom-color: var(--jade); font-weight: 700; }
+    .tabs button[aria-selected="true"] { color: var(--jade); border-bottom-color: var(--jade); font-weight: 700; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--jade) 16%, transparent)); }
     .body { overflow: auto; padding: var(--sp-3); scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-    section { margin: 0 0 var(--sp-2); padding: var(--sp-1) var(--sp-3) var(--sp-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+    section { margin: 0 0 var(--sp-2); padding: var(--sp-1) var(--sp-3) var(--sp-3); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
     section:last-child { margin-bottom: 0; }
-    h3 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--jade); }
-    summary { display: flex; align-items: center; gap: 6px; min-height: var(--ctl); margin: 0 calc(var(--sp-1) * -1); padding: 0 var(--sp-1); border-radius: 6px; cursor: pointer; list-style: none; font-weight: 700; color: var(--jade); user-select: none; }
+    h3 { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--gold); }
+    summary { display: flex; align-items: center; gap: 6px; min-height: var(--ctl); margin: 0 calc(var(--sp-1) * -1); padding: 0 var(--sp-1); border-radius: 6px; cursor: pointer; list-style: none; font-weight: 700; color: var(--gold); user-select: none; }
     summary::-webkit-details-marker { display: none; }
     summary::before { content: ""; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); margin: 0 4px 0 2px; transition: transform .15s ease; }
     details[open] > summary::before { transform: rotate(45deg); }
@@ -103,7 +103,8 @@
     select[size] { padding: 2px; }
     select[size] option { padding: 5px var(--sp-2); border-radius: 4px; }
     select option { background: var(--field); color: var(--ink); }
-    input[type=number] { font-variant-numeric: tabular-nums; }
+    input[type=number] { font-variant-numeric: tabular-nums; text-align: right; }
+    input:focus, select:focus { border-color: var(--jade); box-shadow: var(--glow); }
     button.b {
       min-height: var(--ctl); padding: 4px var(--sp-3); font: inherit; cursor: pointer; color: var(--ink);
       background: var(--raised); border: 1px solid var(--line-strong); border-radius: 6px; white-space: nowrap;
@@ -111,8 +112,9 @@
     }
     button.b:hover { border-color: var(--jade); }
     button.b:active { background: var(--line); }
-    button.b.pri { background: var(--jade); border-color: var(--jade); color: var(--on-jade); font-weight: 700; }
+    button.b.pri { background: linear-gradient(180deg, var(--jade-h), var(--jade)); border-color: var(--jade); color: var(--on-jade); font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 8px color-mix(in srgb, var(--jade) 30%, transparent); }
     button.b.pri:hover { background: var(--jade-h); border-color: var(--jade-h); }
+    button.b.pri:active { background: var(--jade); }
     button.b.dng { color: var(--cinnabar); border-color: var(--cinnabar); }
     button.b.wide { width: 100%; }
     .ico { min-width: var(--ctl); min-height: var(--ctl); padding: 4px var(--sp-2); background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer; color: var(--muted); font: inherit; }

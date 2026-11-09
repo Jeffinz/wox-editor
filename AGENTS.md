@@ -54,7 +54,7 @@
 - v2.1 เพิ่มแผง "ตรวจระบบ" (แท็บค่าหลัก) ตรวจ export ที่สคริปต์ใช้, ฟิลด์ state และอีเว้นต์ค้าง ผลอยู่ในแผงและ console
 
 - v3.0 เพิ่ม `@updateURL`/`@downloadURL` ชี้ raw ของ repo: Tampermonkey อัปเดตเองเมื่อ `@version` สูงขึ้น (ติดตั้งจาก raw URL ครั้งแรกครั้งเดียว: https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js)
-- v3.1 รื้อ UI เป็น Jade Ink ยังไม่ได้ทดสอบในเกมจริง
+- v3.1 รื้อ UI เป็น Jade Ink; v3.1.1 ลบแผงซ้ำจากสคริปต์เก่าที่ค้างใน Tampermonkey (`dropStalePanels`); v3.2 ขัดเกลา: สีทองเป็นสีเน้นหัวข้อ/ชิปเวอร์ชัน, ไล่เฉดหัวแผง, เรืองแสงจุดสถานะและช่องกรอกตอน focus ยังไม่ได้ทดสอบในเกมจริง
 
 ## 7. กติกาการทำงาน
 - ทุกครั้งที่แก้สคริปต์ให้รัน `node --check` ก่อนส่งงาน และ bump `@version` + `VERSION` พร้อมกันแล้วปล่อยด้วย `tools/release.mjs` (ไม่ bump = Tampermonkey ไม่เห็นอัปเดต)
