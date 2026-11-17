@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.2.0
+// @version      3.3.0
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -77,11 +77,22 @@
       if (row && typeof row.th === 'string' && typeof row.color === 'string') return [row.th, row.color];
       return TIER_LBL[Math.min(5, tier)] ?? TIER_LBL[0];
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf };
+    // เทียบ manifest ฐานกับของรอบนี้ (pure): changed เมื่อ build เปลี่ยน, lost เมื่อตารางที่เคยเจอหายไป
+    // manifest รูปแบบเก่า (เก็บ files/exports) หรือ null ถือว่าไม่มีฐาน: คืน changed:false, lost:[]
+    const diffManifest = (prev, cur) => {
+      const out = { changed: false, lost: [] };
+      if (!prev || prev.files || !cur) return out;
+      if (prev.build !== cur.build) out.changed = true;
+      for (const k of Object.keys(prev.found ?? {})) {
+        if (prev.found[k] && !cur.found?.[k]) out.lost.push(k);
+      }
+      return out;
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf, diffManifest };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.2.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.3.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
 
@@ -472,7 +483,11 @@
     });
     // คืนค่าที่หาไม่เจอเป็น null และไม่ throw (แผงเป็นคนบอกผู้ใช้); build มาจาก /src/build.js ที่ยังได้ 200
     const loadCore = async () => {
-      const out = { build: '', core: [], realms: null, martialRanks: null, tiers: null, items: null };
+      // where = ชื่อไฟล์ chunk ที่เจอตารางนั้น (แผงตรวจระบบใช้อ้างอิง); boot/app/core ใช้เก็บฐานใน woxed.manifest
+      const out = {
+        build: '', boot: '', app: null, core: [], where: { realms: '', martialRanks: '', tiers: '', items: '' },
+        realms: null, martialRanks: null, tiers: null, items: null,
+      };
       if (isWiki()) return out;
       const text = async (url) => {
         const r = await fetch(url, { cache: 'no-store' });
@@ -491,22 +506,31 @@
         const appPath = LOC.chunkChain(idx, bootText, '').app;
         if (!appPath) return out;
         const chain = LOC.chunkChain(idx, bootText, await text(appPath));
+        out.boot = chain.boot;
+        out.app = chain.app;
         out.core = chain.core;
         const mods = [];
         for (const p of chain.core) {
           try {
             // URL ต้องเหมือนที่เกมใช้ทุกตัวอักษรเพื่อได้ module instance เดิม (ไม่ใส่ query กันแคช)
-            mods.push(await import(new URL('./' + p.slice(p.lastIndexOf('/') + 1), location.origin + '/b/').href));
+            mods.push({ path: p, ns: await import(new URL('./' + p.slice(p.lastIndexOf('/') + 1), location.origin + '/b/').href) });
           } catch { /* chunk หนึ่งโหลดไม่ได้ ต้องไม่ทำให้เกมหยุด */ }
         }
+        // คืนทั้งค่าและชื่อไฟล์ chunk ที่เจอ เพื่อให้แผงตรวจระบบบอกได้ว่าตารางมาจากไฟล์ไหน
         const find = (test) => {
-          for (const m of mods) { const v = LOC.pick(m, test); if (v) return v; }
+          for (const m of mods) {
+            let v = null;
+            try { v = LOC.pick(m.ns, test); } catch { v = null; }
+            if (v) return { v, path: m.path };
+          }
           return null;
         };
-        out.realms = find(LOC.IS.realms);
-        out.martialRanks = find(LOC.IS.martialRanks);
-        out.tiers = find(LOC.IS.tiers);
-        out.items = find(LOC.IS.items);
+        for (const k of ['realms', 'martialRanks', 'tiers', 'items']) {
+          const hit = find(LOC.IS[k]);
+          if (!hit) continue;
+          out[k] = hit.v;
+          out.where[k] = hit.path.slice(hit.path.lastIndexOf('/') + 1);
+        }
       } catch { /* ดึงชื่อ chunk ไม่ได้: คืนค่าที่มีอยู่ (null) */ }
       return out;
     };
@@ -534,8 +558,10 @@
       $('hevn').textContent = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
       fresh(true);
     };
+    // promise เดียวใช้ร่วมกันทั้งวาดแผง ตรวจระบบ และตรวจอัปเดต: fetch index/boot/app ครั้งเดียวต่อหน้า
     // ตัวจัดการนี้รับเฉพาะ promise ของ loadCore; บั๊กตอนวาดแผงต้องโผล่ใน console ไม่ใช่ถูกกลืนเป็นข้อความนี้
-    loadCore().then(renderCore, () => { $('hqn').textContent = ITEMS_FAIL; });
+    const corePromise = loadCore();
+    corePromise.then(renderCore, () => { $('hqn').textContent = ITEMS_FAIL; });
 
     // ---------- แสดงค่าปัจจุบัน ----------
     const name = (id) => ITEMS?.[id]?.th ?? id;
@@ -744,76 +770,58 @@
     });
     aiObs.observe(document.body, { childList: true, subtree: true });
 
-    // ---------- ตรวจระบบหลังเกมอัปเดต: export ที่สคริปต์เรียกใช้ + ฟิลด์ของ state + อีเว้นต์ค้าง ----------
-    // ต้องตรงกับ CRITICAL ใน tools/snapshot-diff.mjs
-    const NEEDS = [
-      ['/src/build.js', ['BUILD']],
-      ['/src/data.js', ['REALMS']],
-      ['/src/martial.js', ['MARTIAL_RANKS']],
-      ['/src/items.js', ['ITEMS']],
-      ['/src/majors.js', ['LIFE_PATH']],
-      ['/src/sim.js', ['majorEvent', 'allMajors', 'eventsForAudit', 'majorTexts', 'statOdds', 'rarityFor']],
-    ];
+    // ---------- ตรวจระบบหลังเกมอัปเดต: ตารางจาก chunk หลัก + ฟิลด์ของ state ----------
+    // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore()
+    const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
     const STATE_KEYS = ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi'];
     const runHealth = async () => {
-      const lines = [];
-      let build = '?';
-      for (const [path, names] of NEEDS) {
-        try {
-          const m = await import(path);
-          if (path.endsWith('build.js')) build = m.BUILD ?? '?';
-          const miss = names.filter((n) => !(n in m));
-          lines.push(miss.length ? `✖ ${path}: หาย ${miss.join(', ')}` : `✔ ${path}`);
-        } catch { lines.push(`✖ ${path}: โหลดไม่ได้`); }
-      }
-      lines.unshift(`สคริปต์ v${VERSION} · BUILD ${build}`);
-      if (!t) lines.push('– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)');
+      // ตรวจ state ก่อน เพราะทำได้ทันทีโดยไม่ต้องรอ chunk
+      const state = [];
+      if (!t) state.push('– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)');
       else {
         const miss = STATE_KEYS.filter((k) => t[k] === undefined);
-        lines.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
+        state.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
         const sm = STATS.map(([k]) => k).filter((k) => t.stats?.[k] === undefined);
-        if (sm.length) lines.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
-        if (t.pending?.id) lines.push(SIM?.majorEvent?.(t.pending.id) ? '✔ อีเว้นต์ค้างยังมีในเกม' : `✖ อีเว้นต์ค้าง "${t.pending.id}" ไม่พบในโค้ดแล้ว`);
+        if (sm.length) state.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
       }
-      $('hchk').textContent = lines.join('\n');
-      console.info('[WoX Editor]\n' + lines.join('\n'));
-    };
-    // ตรวจการอัปเดต: ดึงไฟล์จากเว็บเกมที่กำลังเล่น (ไม่ใช่โฟลเดอร์ในเครื่อง) เทียบกับฐานที่จำไว้ใน localStorage
-    const WATCH = ['build.js', 'data.js', 'martial.js', 'items.js', 'majors.js', 'sim.js'];
-    const exportsOfSrc = (text) => {
-      const s = new Set();
-      for (const m of text.matchAll(/^export\s+(?:async\s+)?(?:const|let|var|function\*?|class)\s+([A-Za-z_$][\w$]*)/gm)) s.add(m[1]);
-      for (const m of text.matchAll(/^export\s*\{([^}]*)\}/gm)) for (const p of m[1].split(',')) { const n = p.trim().split(/\s+as\s+/).pop(); if (n) s.add(n); }
-      return [...s].sort();
-    };
-    const hashOf = async (text) => {
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-      return [...new Uint8Array(buf)].slice(0, 8).map((x) => x.toString(16).padStart(2, '0')).join('');
-    };
-    const checkUpdate = async () => {
-      const cur = { build: '', files: {}, exports: {} };
-      try {
-        for (const f of WATCH) {
-          const r = await fetch('/src/' + f, { cache: 'no-store' });
-          if (!r.ok) throw new Error(f + ' ตอบ ' + r.status);
-          const text = await r.text();
-          cur.files[f] = await hashOf(text);
-          cur.exports[f] = exportsOfSrc(text);
-          if (f === 'build.js') cur.build = text.match(/BUILD\s*=\s*"([^"]+)"/)?.[1] ?? '';
+      const head = [`สคริปต์ v${VERSION}`];
+      const show = (lines) => { $('hchk').textContent = lines.join('\n'); console.info('[WoX Editor]\n' + lines.join('\n')); };
+      if (isWiki()) { show([...head, '– หน้า wiki ไม่มี chunk หลักของเกม จึงตรวจตารางไม่ได้', ...state]); return; }
+      // บรรทัด state ขึ้นทันที ไม่ต้องรอ chunk (อ่าน chunk หลักใช้เวลาหลายวินาที)
+      show([...head, '– กำลังอ่าน chunk หลัก…', ...state]);
+      const c = await corePromise.catch(() => null);
+      const lines = [...head];
+      if (!c) lines.push('✖ อ่าน chunk หลักไม่ได้');
+      else {
+        lines.push(c.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
+        for (const [label, key] of TABLES) {
+          lines.push(c[key] ? `✔ ${label} (${c.where?.[key] || 'chunk หลัก'})` : `✖ ${label}: หาไม่เจอใน chunk หลัก`);
         }
-      } catch (e) { $('hupd').textContent = 'ตรวจการอัปเดตไม่ได้: ' + e.message; return; }
+      }
+      lines.push('– อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle (ดู Task 5)');
+      show([...lines, ...state]);
+    };
+    // ตรวจการอัปเดต: ใช้ build กับชื่อ chunk จาก loadCore() เทียบกับฐานใน localStorage
+    // ชื่อไฟล์ chunk มี hash อยู่แล้ว จึงไม่ต้อง hash เนื้อหาไฟล์
+    const checkUpdate = async () => {
+      if (isWiki()) return; // หน้า wiki ไม่มี chunk ของเกม ห้ามเขียนทับฐานด้วยค่าว่าง
+      let c = null;
+      try { c = await corePromise; } catch { /* อ่านไม่ได้: ไม่เขียนทับฐาน */ }
+      if (!c?.build) { $('hupd').textContent = 'ตรวจการอัปเดตไม่ได้: อ่าน BUILD จาก /src/build.js ไม่ได้'; return; }
+      const found = {};
+      for (const [, key] of TABLES) found[key] = !!c[key];
+      const cur = { build: c.build, chain: { boot: c.boot, app: c.app, core: c.core }, found };
       let prev = null;
       try { prev = JSON.parse(store.get('manifest') || 'null'); } catch { /* ใช้ค่าใหม่ */ }
       store.set('manifest', JSON.stringify(cur));
-      if (!prev?.files) { $('hupd').textContent = 'บันทึกเวอร์ชันนี้เป็นฐานแล้ว (BUILD ' + cur.build + ')'; return; }
-      const changed = WATCH.filter((f) => prev.files[f] !== cur.files[f]);
-      if (!changed.length && prev.build === cur.build) { $('hupd').textContent = 'ไม่มีการเปลี่ยนแปลง (BUILD ' + cur.build + ')'; return; }
-      const lost = [];
-      for (const f of WATCH) for (const n of prev.exports?.[f] ?? []) if (!cur.exports[f].includes(n)) lost.push(`${f} :: ${n}`);
-      const msg = `เกมอัปเดตแล้ว BUILD ${prev.build || '?'} → ${cur.build}\nไฟล์ที่เปลี่ยน: ${changed.join(', ') || '-'}\n` +
-        (lost.length ? '✖ export ที่หาย: ' + lost.join(', ') : '✔ export เดิมยังอยู่');
+      const { changed, lost } = LOC.diffManifest(prev, cur);
+      // manifest รูปแบบเก่า (มี files) ถือว่าไม่มีฐาน
+      if (!prev || prev.files) { $('hupd').textContent = 'บันทึกเวอร์ชันนี้เป็นฐานแล้ว (BUILD ' + cur.build + ')'; return; }
+      if (!changed && !lost.length) { $('hupd').textContent = 'ไม่มีการเปลี่ยนแปลง (BUILD ' + cur.build + ')'; return; }
+      const msg = (changed ? `เกมอัปเดตแล้ว BUILD ${prev.build || '?'} → ${cur.build}` : `BUILD ${cur.build} ไม่เปลี่ยน แต่ผลตรวจเปลี่ยน`) + '\n' +
+        (lost.length ? '✖ ตารางที่หาย: ' + lost.join(', ') : '✔ ตารางเดิมยังอยู่ครบ');
       $('hupd').textContent = msg;
-      toast(lost.length ? 'เกมอัปเดต และมี export หาย ดูในแผง' : 'เกมอัปเดตแล้ว ดูรายละเอียดในแผง', lost.length > 0);
+      toast(lost.length ? 'มีตารางที่เคยเจอหายไป ดูในแผง' : 'เกมอัปเดตแล้ว ดูรายละเอียดในแผง', lost.length > 0);
     };
     setTimeout(() => { runHealth(); checkUpdate(); }, 3000);
 

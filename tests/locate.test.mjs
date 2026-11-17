@@ -70,6 +70,43 @@ test('tierOf คืนป้ายแรกเมื่อไม่มี tier',
   assert.deepEqual(LOC.tierOf(undefined, null), LOC.TIER_LBL[0]);
 });
 
+// manifest ที่ checkUpdate เก็บ: { build, chain: { boot, app, core }, found: { realms, martialRanks, tiers, items } }
+const MAN = (build, found) => ({ build, chain: { boot: '/b/boot-a.js', app: '/b/app-a.js', core: ['/b/c-a.js'] }, found });
+
+test('diffManifest: prev เป็น null ถือว่าไม่มีฐาน', () => {
+  assert.deepEqual(LOC.diffManifest(null, MAN('b', { items: false })), { changed: false, lost: [] });
+});
+
+test('diffManifest: build ต่างกัน → changed', () => {
+  const prev = MAN('a', { realms: true, martialRanks: true, tiers: true, items: true });
+  const cur = MAN('b', { realms: true, martialRanks: true, tiers: true, items: true });
+  assert.deepEqual(LOC.diffManifest(prev, cur), { changed: true, lost: [] });
+});
+
+test('diffManifest: build เดิมและตารางครบ → ไม่เปลี่ยน', () => {
+  const prev = MAN('a', { realms: true, items: true });
+  const cur = MAN('a', { realms: true, items: true });
+  assert.deepEqual(LOC.diffManifest(prev, cur), { changed: false, lost: [] });
+});
+
+test('diffManifest: found.items จาก true เป็น false → lost มี items', () => {
+  const prev = MAN('a', { realms: true, martialRanks: true, tiers: true, items: true });
+  const cur = MAN('a', { realms: true, martialRanks: true, tiers: true, items: false });
+  assert.deepEqual(LOC.diffManifest(prev, cur), { changed: false, lost: ['items'] });
+});
+
+test('diffManifest: ตารางที่ไม่เคยเจอหายไปไม่นับเป็น lost', () => {
+  const prev = MAN('a', { realms: true, tiers: false });
+  const cur = MAN('a', { realms: true, tiers: false });
+  assert.deepEqual(LOC.diffManifest(prev, cur), { changed: false, lost: [] });
+});
+
+test('diffManifest: manifest รูปแบบเก่า (มี files) ถือว่าไม่มีฐาน', () => {
+  const prev = { build: 'a', files: { 'sim.js': 'deadbeef' }, exports: {} };
+  const cur = MAN('b', { realms: true, items: false });
+  assert.deepEqual(LOC.diffManifest(prev, cur), { changed: false, lost: [] });
+});
+
 test('chunkChain reads the real mwkobenp chain', (t) => {
   if (!haveBundle) return t.skip('run node tools/fetch-bundle.mjs first');
   const index = readFileSync(new URL('index.html', BUNDLE), 'utf8');
