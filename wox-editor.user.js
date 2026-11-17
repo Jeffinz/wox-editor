@@ -88,7 +88,9 @@
       }
       return out;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf, diffManifest };
+    // อ่าน chunk หลักได้จริงหรือยัง (pure): มี build แต่ core ว่าง = ยังไม่ได้อ่าน ห้ามลงว่าตารางหาย
+    const coreLoaded = (c) => Array.isArray(c?.core) && c.core.length > 0;
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf, diffManifest, coreLoaded };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -791,9 +793,10 @@
       show([...head, '– กำลังอ่าน chunk หลัก…', ...state]);
       const c = await corePromise.catch(() => null);
       const lines = [...head];
-      if (!c) lines.push('✖ อ่าน chunk หลักไม่ได้');
+      lines.push(c?.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
+      // อ่าน BUILD ได้แต่ chunk ไม่มา (state ยังไม่มา / index-boot-app อ่านไม่ได้) = ยังไม่ได้ตรวจจริง ห้ามลงว่า ✖ ทุกตาราง
+      if (!LOC.coreLoaded(c)) lines.push('– ยังไม่ได้อ่าน chunk หลัก');
       else {
-        lines.push(c.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
         for (const [label, key] of TABLES) {
           lines.push(c[key] ? `✔ ${label} (${c.where?.[key] || 'chunk หลัก'})` : `✖ ${label}: หาไม่เจอใน chunk หลัก`);
         }
@@ -807,7 +810,11 @@
       if (isWiki()) return; // หน้า wiki ไม่มี chunk ของเกม ห้ามเขียนทับฐานด้วยค่าว่าง
       let c = null;
       try { c = await corePromise; } catch { /* อ่านไม่ได้: ไม่เขียนทับฐาน */ }
-      if (!c?.build) { $('hupd').textContent = 'ตรวจการอัปเดตไม่ได้: อ่าน BUILD จาก /src/build.js ไม่ได้'; return; }
+      // อ่าน BUILD ได้แต่ chunk ไม่มา = ยังไม่ได้อ่านจริง ห้ามเขียนทับฐาน (เหมือนหน้า wiki)
+      if (!c?.build || !LOC.coreLoaded(c)) {
+        $('hupd').textContent = c?.build ? 'ตรวจการอัปเดตไม่ได้: อ่าน chunk หลักไม่ได้' : 'ตรวจการอัปเดตไม่ได้: อ่าน BUILD จาก /src/build.js ไม่ได้';
+        return;
+      }
       const found = {};
       for (const [, key] of TABLES) found[key] = !!c[key];
       const cur = { build: c.build, chain: { boot: c.boot, app: c.app, core: c.core }, found };

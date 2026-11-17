@@ -70,6 +70,13 @@ test('tierOf คืนป้ายแรกเมื่อไม่มี tier',
   assert.deepEqual(LOC.tierOf(undefined, null), LOC.TIER_LBL[0]);
 });
 
+test('coreLoaded: นับว่าอ่านแล้วเมื่อมี chunk หลัก', () => {
+  assert.equal(LOC.coreLoaded({ core: ['/b/c-a.js'] }), true);
+  assert.equal(LOC.coreLoaded({ core: [] }), false);
+  assert.equal(LOC.coreLoaded(null), false);
+  assert.equal(LOC.coreLoaded({}), false);
+});
+
 // manifest ที่ checkUpdate เก็บ: { build, chain: { boot, app, core }, found: { realms, martialRanks, tiers, items } }
 const MAN = (build, found) => ({ build, chain: { boot: '/b/boot-a.js', app: '/b/app-a.js', core: ['/b/c-a.js'] }, found });
 
