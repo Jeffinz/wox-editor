@@ -9,6 +9,35 @@
 // ==/UserScript==
 (function () {
   'use strict';
+  // หาตารางข้อมูลของเกมจากรูปร่างของค่า เพราะชื่อ export ใน bundle ถูกย่อและเปลี่ยนทุก build
+  const LOC = (() => {
+    // คืน export เดียวที่ผ่าน test; ไม่มีหรือมีมากกว่า 1 ตัว → null (กันเลือกผิดตัวแบบเงียบ)
+    const pick = (ns, test) => {
+      const hits = [];
+      // namespace ของ ES module เป็น enumerable ทุกตัว จึงวนด้วย Object.keys ได้
+      for (const k of Object.keys(ns ?? {})) {
+        let v;
+        try { v = ns[k]; } catch { continue; } // export ที่อ่านแล้ว throw ให้ข้าม
+        let ok = false;
+        try { ok = !!test(v); } catch { ok = false; }
+        if (ok) hits.push(v);
+      }
+      return hits.length === 1 ? hits[0] : null;
+    };
+    const IS = {
+      // REALMS: [{id:"mortal",lifespan:75,statCap:100,layers:0,…}]
+      realms: (v) => Array.isArray(v) && v[0]?.id === 'mortal' && typeof v[0].lifespan === 'number',
+      // MARTIAL_RANKS: [{id:"novice",th:"ผู้ฝึกยุทธ์",…,years:0,…}]
+      martialRanks: (v) => Array.isArray(v) && v[0]?.id === 'novice' && typeof v[0] === 'object' && 'years' in v[0],
+      // TIERS: [{th:"สามัญ",en:"Common",color:"#8c918e"}]
+      tiers: (v) => Array.isArray(v) && v[0]?.color === '#8c918e' && v[0].en === 'Common',
+      // ITEMS: object ที่มี woodSword บาง build ตั้งแบบไม่ enumerable จึงอ่านจาก descriptor
+      items: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.getOwnPropertyDescriptor(v, 'woodSword')?.value?.slot === 'weapon',
+    };
+    return { pick, IS };
+  })();
+  // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
+  if (typeof document === 'undefined') { module.exports = LOC; return; }
   const VERSION = '3.2.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, SIM = null, MJ = null, EVENTS = [];
