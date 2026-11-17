@@ -28,8 +28,10 @@ const dirty = run('git', ['status', '--porcelain', '--', file]);
 if (last && dirty && !gt(header, last)) fail(`ไฟล์เปลี่ยนแต่ version ${header} ไม่สูงกว่า ${last} Tampermonkey จะไม่เห็นอัปเดต`);
 
 run('node', ['--check', file]);
-console.log(`✔ version ${header} (ก่อนหน้า ${last ?? 'ไม่มี'}), syntax ผ่าน`);
+// ไฟล์ tests อยู่ในโฟลเดอร์ tests/ (Node เวอร์ชันนี้ไม่รับ path โฟลเดอร์ตรง ๆ จึงส่ง glob)
+try { run('node', ['--test', 'tests/**/*.test.mjs']); } catch (e) { fail('เทสไม่ผ่าน\n' + ([e.stdout, e.stderr].filter(Boolean).join('\n') || e.message)); }
+console.log(`✔ version ${header} (ก่อนหน้า ${last ?? 'ไม่มี'}), syntax และเทสผ่าน`);
 if (dry) { console.log('dry-run: ไม่ commit/push'); process.exit(0); }
-run('git', ['add', file, 'tools/release.mjs', '.gitignore', 'CLAUDE.md', 'AGENTS.md']);
+run('git', ['add', file, 'tools/release.mjs', 'tests/', '.gitignore', 'CLAUDE.md', 'AGENTS.md']);
 console.log(run('git', ['commit', '-m', msg]));
 console.log(run('git', ['push']));
