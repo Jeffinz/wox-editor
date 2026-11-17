@@ -46,7 +46,7 @@ offset ทั้งหมดเป็น byte offset ของ build นี้ �
 | ES export ของ `app-*.js` | ไม่มีเลย คำว่า `export` ปรากฏ 2 ครั้ง เป็นข้อความปุ่ม "exportSave" (4,657,249 และ 5,403,636) นับ `export{` ได้ 0 → `import()` ได้ namespace ว่าง |
 | chunk `c-577XDD6D.js` | 1,789 export (บล็อก `export{` ที่ 5,650,319) แต่ไม่มีเนื้ออีเว้นต์ และไม่มีตาราง `RARITY` แบบถ่วงน้ำหนัก: grep `พิธีบรรลุนิติภาวะ`, `weight:.55`, `gap:480`, `innerDemon:4` ได้ 0 ทุกตัว ตารางป้ายระดับเดียวที่พบคือ `bre` (686,449) 5 แถว ไม่มี weight/gap และไม่ได้อยู่ในบล็อก export |
 | chunk อื่นทั้ง 31 ไฟล์ + `wiki-UPDJ4Y7Q.js` | 0: ไม่มีชื่ออีเว้นต์ (`พิธีบรรลุนิติภาวะ`) และไม่มีเครื่องหมายของตาราง `RARITY` (`weight:.55`, `gap:480`, `innerDemon:4`) ในไฟล์เหล่านี้เลย |
-| window global | มีแค่ `window.woxPerson` (5,400,343) และ `window.wox` (5,400,408) และติดเงื่อนไข `new URLSearchParams(location.search).has("promo")` (5,400,328) |
+| window global | มี `window.woxPerson` (5,400,343) และ `window.wox` (5,400,408) และติดเงื่อนไข `new URLSearchParams(location.search).has("promo")` (5,400,328) |
 | `window.wox` มีอะไร | `scene/setSpeed/render/chip`, getter `life`, `shareFor`, `playSh`, `delveTest`, `endRift`, `net`, `resultTest`, `shareTest`, `whoIn`, `landsFor`, `castOf`, `shows()`, `held()`, `leaveShowTest`, `endShowTest`, `loadSlotTest` — เป็น UI/ฉาก ไม่มี sim, ไม่มีตารางอีเว้นต์, ไม่มี `majorTexts`/`statOdds`/`rarityFor` |
 | globalThis (diagnostics) | `globalThis.__estate` (ตั้ง, 4,648,935 — estate view/sect/tabs), `globalThis.__sceneCuts??=` (ตั้ง, 3,825,927 — watchdog ของ cutscene), `globalThis.__sfxSpy` (อ่านถ้ามี, 3,463,228), `globalThis.__answerSurvives` (อ่านถ้ามี, 2,903,365) — ไม่มี sim หรือข้อมูลอีเว้นต์ในตัวไหน |
 | state object | มี `pending` และ `log` (ดูข้อ 2) |

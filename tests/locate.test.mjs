@@ -44,6 +44,15 @@ test('items matches non-enumerable woodSword', () => {
   assert.equal(LOC.IS.items(ns), true);
 });
 
+test('items อ่าน woodSword ที่เป็น getter ได้ และไม่ throw เมื่อ getter พัง', () => {
+  const ns = {};
+  Object.defineProperty(ns, 'woodSword', { get: () => ({ id: 'woodSword', slot: 'weapon' }), enumerable: true });
+  assert.equal(LOC.IS.items(ns), true);
+  const bad = {};
+  Object.defineProperty(bad, 'woodSword', { get() { throw new Error('x'); }, enumerable: true });
+  assert.equal(LOC.IS.items(bad), false);
+});
+
 test('tiers and martialRanks match their first rows', () => {
   const tiers = [{ th: 'สามัญ', en: 'Common', color: '#8c918e' }];
   const ranks = [{ id: 'novice', th: 'ผู้ฝึกยุทธ์', years: 0 }];
@@ -65,16 +74,50 @@ test('tierOf อ่าน tier แบบสตริงจาก RAR_LBL', () =>
   assert.deepEqual(LOC.tierOf({ tier: 'weird' }, null), LOC.TIER_LBL[0]);
 });
 
+test('tierOf อ่าน tier ที่เป็นสตริงตัวเลขเหมือนตัวเลข', () => {
+  assert.deepEqual(LOC.tierOf({ tier: '3' }, null), LOC.TIER_LBL[3]);
+  assert.deepEqual(LOC.tierOf({ tier: '0' }, [{ th: 'ทดสอบ', en: 'Test', color: '#123456' }]), ['ทดสอบ', '#123456']);
+});
+
+test('tierIdx: ตัวเลขคงเดิม, สตริงตัวเลขนับเป็นตัวเลข, ระดับที่จับคู่ไม่ได้ได้ null', () => {
+  assert.equal(LOC.tierIdx(0), 0);
+  assert.equal(LOC.tierIdx(9), 5);
+  assert.equal(LOC.tierIdx('3'), 3);
+  assert.equal(LOC.tierIdx(undefined), 0);
+  assert.equal(LOC.tierIdx(null), 0);
+  assert.equal(LOC.tierIdx('legendary'), null);
+});
+
+test('numOr: ค่าว่างหรือไม่ใช่จำนวนจริงคืน null', () => {
+  assert.equal(LOC.numOr('12'), 12);
+  assert.equal(LOC.numOr(3), 3);
+  assert.equal(LOC.numOr('0'), 0);
+  assert.equal(LOC.numOr(''), null);
+  assert.equal(LOC.numOr(null), null);
+  assert.equal(LOC.numOr(undefined), null);
+  assert.equal(LOC.numOr('abc'), null);
+  assert.equal(LOC.numOr(NaN), null);
+  assert.equal(LOC.numOr(Infinity), null);
+});
+
 test('tierOf คืนป้ายแรกเมื่อไม่มี tier', () => {
   assert.deepEqual(LOC.tierOf({}, null), LOC.TIER_LBL[0]);
   assert.deepEqual(LOC.tierOf(undefined, null), LOC.TIER_LBL[0]);
 });
 
-test('coreLoaded: นับว่าอ่านแล้วเมื่อมี chunk หลัก', () => {
-  assert.equal(LOC.coreLoaded({ core: ['/b/c-a.js'] }), true);
-  assert.equal(LOC.coreLoaded({ core: [] }), false);
+test('coreLoaded: นับว่าอ่านแล้วเมื่อ import chunk สำเร็จทุกตัว', () => {
+  assert.equal(LOC.coreLoaded({ core: ['/b/c-a.js'], imported: true }), true);
+  assert.equal(LOC.coreLoaded({ core: [], imported: true }), false);
+  // import ล้ม = ยังไม่ได้อ่าน ห้ามให้ตรวจระบบ/ตรวจอัปเดตลงว่าตารางหาย
+  assert.equal(LOC.coreLoaded({ core: ['/b/c-a.js'], imported: false }), false);
+  assert.equal(LOC.coreLoaded({ core: ['/b/c-a.js'] }), false);
   assert.equal(LOC.coreLoaded(null), false);
   assert.equal(LOC.coreLoaded({}), false);
+});
+
+test('chunkUrl ใช้ path ของ chunk เอง ไม่ hardcode โฟลเดอร์ /b/', () => {
+  assert.equal(LOC.chunkUrl('/b/c-a.js', 'https://game.test'), 'https://game.test/b/c-a.js');
+  assert.equal(LOC.chunkUrl('/assets/js/c-b.js', 'https://game.test'), 'https://game.test/assets/js/c-b.js');
 });
 
 // manifest ที่ checkUpdate เก็บ: { build, chain: { boot, app, core }, found: { realms, martialRanks, tiers, items } }
@@ -112,6 +155,20 @@ test('diffManifest: manifest รูปแบบเก่า (มี files) ถ�
   const prev = { build: 'a', files: { 'sim.js': 'deadbeef' }, exports: {} };
   const cur = MAN('b', { realms: true, items: false });
   assert.deepEqual(LOC.diffManifest(prev, cur), { changed: false, lost: [] });
+});
+
+test('diffManifest: ค่าที่ parse ได้แต่ไม่ใช่ object ถือว่าไม่มีฐาน', () => {
+  const cur = MAN('b', { realms: true });
+  assert.deepEqual(LOC.diffManifest('abc', cur), { changed: false, lost: [] });
+  assert.deepEqual(LOC.diffManifest([], cur), { changed: false, lost: [] });
+});
+
+test('usableManifest: รับเฉพาะ object ธรรมดาที่ไม่ใช่รูปแบบเก่า', () => {
+  assert.equal(LOC.usableManifest(MAN('a', { realms: true })), true);
+  assert.equal(LOC.usableManifest(null), false);
+  assert.equal(LOC.usableManifest('abc'), false);
+  assert.equal(LOC.usableManifest([]), false);
+  assert.equal(LOC.usableManifest({ build: 'a', files: {} }), false);
 });
 
 test('chunkChain reads the real mwkobenp chain', (t) => {
