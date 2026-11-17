@@ -34,13 +34,40 @@
       // ITEMS: object ที่มี woodSword บาง build ตั้งแบบไม่ enumerable จึงอ่านจาก descriptor
       items: (v) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.getOwnPropertyDescriptor(v, 'woodSword')?.value?.slot === 'weapon',
     };
-    return { pick, IS };
+    // อ่านชื่อ chunk หลักจากข้อความของเกม (pure): index → boot → app → core
+    // ชื่อไฟล์มี hash เปลี่ยนทุก build จึงต้องอ่านจากไฟล์จริง ไม่ hardcode
+    const chunkChain = (indexHtml, bootText, appText) => {
+      const out = { boot: '', app: null, core: [] };
+      // index มี inline script อื่นปนอยู่ จึงเอาเฉพาะ <script> ที่มีทั้ง type="module" และ src
+      const tag = [...String(indexHtml ?? '').matchAll(/<script\b[^>]*>/gi)]
+        .map((m) => m[0])
+        .find((s) => /\btype\s*=\s*["']module["']/i.test(s) && /\bsrc\s*=\s*["'][^"']+["']/i.test(s));
+      const src = tag?.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+      if (!src) return out;
+      // "b/boot-x.js" (หรือ "./b/…", "/b/…") → "/b/boot-x.js"
+      out.boot = '/' + String(src).replace(/^\.?\//, '');
+      // chunk ร่วมอยู่โฟลเดอร์เดียวกับ boot
+      const dir = out.boot.slice(0, out.boot.lastIndexOf('/') + 1);
+      // boot เลือก entry ตอนรัน (มีทั้ง app และ wiki) จึงเอาเฉพาะ import ของ app
+      const app = String(bootText ?? '').match(/import\(\s*["']\.\/(app-[\w-]+\.js)["']\s*\)/)?.[1];
+      if (!app) return out;
+      out.app = dir + app;
+      // chunk ที่ app import แบบ static ทั้งหมด (ชื่อไม่ซ้ำ)
+      const seen = new Set();
+      for (const m of String(appText ?? '').matchAll(/from\s*["']\.\/(c-[\w-]+\.js)["']/g)) {
+        if (seen.has(m[1])) continue;
+        seen.add(m[1]);
+        out.core.push(dir + m[1]);
+      }
+      return out;
+    };
+    return { pick, IS, chunkChain };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
   const VERSION = '3.2.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
-  let t = null, ITEMS = null, REALMS = null, SIM = null, MJ = null, EVENTS = [];
+  let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
 
   // จับ state ตอนเกมเซฟ (ต้องเกิดอย่างน้อย 1 ครั้ง)
   const orig = JSON.stringify;
@@ -415,28 +442,83 @@
     $('hevq').oninput = drawEvents; $('hevg').onchange = drawEvents; $('hevr').onchange = drawEvents;
     $('hevl').onchange = showEv;
 
-    import('/src/data.js').then((m) => {
-      REALMS = m.REALMS;
-      $('h_realm').innerHTML = REALMS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)} (${r.layers} ชั้น)</option>`).join('');
+    // ---------- โหลดตารางข้อมูลจาก chunk ของเกม (เกมแบบ bundle ไม่มี /src/*.js แล้ว) ----------
+    // หน้า wiki ใช้ entry อื่น: ห้าม fetch/import chunk ของเกมเลย
+    const isWiki = () => !!document.querySelector('meta[name="wox-entry"][content="wiki"]');
+    // ต้องรอจน hook JSON.stringify ได้ state ก่อน ไม่งั้น chunk หลัก throw ตอน top-level และเกมหยุด
+    const waitState = (ms = 120000) => new Promise((res) => {
+      const t0 = Date.now();
+      const step = () => {
+        if (t || Date.now() - t0 >= ms) return res(!!t);
+        setTimeout(step, 500);
+      };
+      step();
+    });
+    // คืนค่าที่หาไม่เจอเป็น null และไม่ throw (แผงเป็นคนบอกผู้ใช้); build มาจาก /src/build.js ที่ยังได้ 200
+    const loadCore = async () => {
+      const out = { build: '', core: [], realms: null, martialRanks: null, tiers: null, items: null };
+      if (isWiki()) return out;
+      const text = async (url) => {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) throw new Error(url + ' ตอบ ' + r.status);
+        return r.text();
+      };
+      try {
+        out.build = (await text('/src/build.js')).match(/BUILD\s*=\s*"([^"]+)"/)?.[1] ?? '';
+      } catch { /* ไม่มี BUILD ก็ไม่เป็นไร */ }
+      if (!(await waitState())) return out;
+      try {
+        const idx = await text('/');
+        const bootPath = LOC.chunkChain(idx, '', '').boot;
+        if (!bootPath) return out;
+        const bootText = await text(bootPath);
+        const appPath = LOC.chunkChain(idx, bootText, '').app;
+        if (!appPath) return out;
+        const chain = LOC.chunkChain(idx, bootText, await text(appPath));
+        out.core = chain.core;
+        const mods = [];
+        for (const p of chain.core) {
+          try {
+            // URL ต้องเหมือนที่เกมใช้ทุกตัวอักษรเพื่อได้ module instance เดิม (ไม่ใส่ query กันแคช)
+            mods.push(await import(new URL('./' + p.slice(p.lastIndexOf('/') + 1), location.origin + '/b/').href));
+          } catch { /* chunk หนึ่งโหลดไม่ได้ ต้องไม่ทำให้เกมหยุด */ }
+        }
+        const find = (test) => {
+          for (const m of mods) { const v = LOC.pick(m, test); if (v) return v; }
+          return null;
+        };
+        out.realms = find(LOC.IS.realms);
+        out.martialRanks = find(LOC.IS.martialRanks);
+        out.tiers = find(LOC.IS.tiers);
+        out.items = find(LOC.IS.items);
+      } catch { /* ดึงชื่อ chunk ไม่ได้: คืนค่าที่มีอยู่ (null) */ }
+      return out;
+    };
+
+    const ITEMS_FAIL = 'โหลดรายการไอเทมไม่ได้ ลองรีโหลดหน้าเกม';
+    const renderCore = (c) => {
+      if (isWiki()) return;
+      if (c.realms) {
+        REALMS = c.realms;
+        $('h_realm').innerHTML = REALMS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)} (${r.layers} ชั้น)</option>`).join('');
+      }
+      if (c.martialRanks) {
+        $('h_mrank').innerHTML = c.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
+      }
+      if (c.items) {
+        ITEMS = c.items;
+        // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
+        itemList = Object.getOwnPropertyNames(ITEMS).map((k) => ITEMS[k]).filter((i) => i && i.id)
+          .sort((a, b) => a.slot.localeCompare(b.slot) || (a.tier ?? 0) - (b.tier ?? 0));
+        drawItems();
+      } else $('hqn').textContent = ITEMS_FAIL;
+      TIERS = c.tiers;
+      // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404)
+      $('hevn').textContent = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
       fresh(true);
-    }).catch(() => {});
-    import('/src/martial.js').then((m) => {
-      $('h_mrank').innerHTML = m.MARTIAL_RANKS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
-      fresh(true);
-    }).catch(() => {});
-    import('/src/items.js').then((m) => {
-      ITEMS = m.ITEMS;
-      // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
-      itemList = Object.getOwnPropertyNames(ITEMS).map((k) => ITEMS[k]).filter((i) => i && i.id)
-        .sort((a, b) => a.slot.localeCompare(b.slot) || (a.tier ?? 0) - (b.tier ?? 0));
-      drawItems();
-      fresh(true);
-    }).catch(() => { $('hqn').textContent = 'โหลดรายการไอเทมไม่ได้ ลองรีโหลดหน้าเกม'; });
-    Promise.all([import('/src/majors.js'), import('/src/sim.js')]).then(([mj, sim]) => {
-      SIM = sim; MJ = mj;
-      drawEvents();
-      aiSig = ''; try { aiScan(); } catch { /* ignore */ } // sim มาถึงทีหลัง ต้องสแกนการ์ดที่ค้างอยู่ใหม่
-    }).catch(() => { $('hevn').textContent = 'โหลดรายการอีเว้นต์ไม่ได้ ลองรีโหลดหน้าเกม'; });
+    };
+    // ตัวจัดการนี้รับเฉพาะ promise ของ loadCore; บั๊กตอนวาดแผงต้องโผล่ใน console ไม่ใช่ถูกกลืนเป็นข้อความนี้
+    loadCore().then(renderCore, () => { $('hqn').textContent = ITEMS_FAIL; });
 
     // ---------- แสดงค่าปัจจุบัน ----------
     const name = (id) => ITEMS?.[id]?.th ?? id;

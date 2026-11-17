@@ -3,9 +3,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const LOC = require('../wox-editor.user.js');
+// ไฟล์เกมที่ดาวน์โหลดมา (bundle/) ไม่ได้อยู่ใน repo; ถ้าไม่มีให้ข้ามเทสที่ใช้ไฟล์จริง
+const BUNDLE = new URL('../bundle/mwkobenp/', import.meta.url);
+const haveBundle = existsSync(new URL('index.html', BUNDLE));
 
 test('pick finds the one realms export', () => {
   const ns = { q: [{ id: 'mortal', lifespan: 75, layers: 0 }], x: [1, 2] };
@@ -47,4 +51,23 @@ test('tiers and martialRanks match their first rows', () => {
   assert.equal(LOC.IS.martialRanks(ranks), true);
   assert.equal(LOC.IS.tiers(ranks), false);
   assert.equal(LOC.IS.martialRanks(tiers), false);
+});
+
+test('chunkChain reads the real mwkobenp chain', (t) => {
+  if (!haveBundle) return t.skip('run node tools/fetch-bundle.mjs first');
+  const index = readFileSync(new URL('index.html', BUNDLE), 'utf8');
+  const boot = readFileSync(new URL('b/boot-3ENUIJBD.js', BUNDLE), 'utf8');
+  const app = readFileSync(new URL('b/app-56NJKGMX.js', BUNDLE), 'utf8');
+  const c = LOC.chunkChain(index, boot, app);
+  assert.equal(c.boot, '/b/boot-3ENUIJBD.js');
+  assert.equal(c.app, '/b/app-56NJKGMX.js');
+  assert.ok(c.core.includes('/b/c-577XDD6D.js'), 'core ต้องมี chunk หลักของ app');
+});
+
+test('chunkChain returns no core for wiki entry', () => {
+  const index = '<script type="module" src="b/boot-x.js"></script>';
+  const boot = 'const m = await import("./wiki-X.js");';
+  const c = LOC.chunkChain(index, boot, '');
+  assert.equal(c.app, null);
+  assert.deepEqual(c.core, []);
 });
