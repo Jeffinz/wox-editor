@@ -61,7 +61,23 @@
       }
       return out;
     };
-    return { pick, IS, chunkChain };
+    // ระดับความหายาก: ไอเทมใช้ tier (ชื่อและสีตรงกับ TIERS ใน items.js), อีเว้นต์ใช้ rarityFor (ชื่อตรงกับ RARITY ใน rarity.js)
+    const TIER_LBL = [['สามัญ', '#8c918e'], ['ขั้นมนุษย์', '#c9c9c0'], ['ขั้นปฐพี', '#4f9a58'], ['ขั้นฟ้า', '#3f7fc0'], ['ขั้นสวรรค์', '#8a5ac0'], ['ขั้นเซียน', '#d4a838']];
+    const RAR_LBL = { common: ['ธรรมดา', '#8c918e'], uncommon: ['ไม่ธรรมดา', '#4f9a58'], rare: ['หายาก', '#3f7fc0'], epic: ['หายากมาก', '#8a5ac0'], legendary: ['ตำนาน', '#d4a838'] };
+    // ป้ายระดับของไอเทมเป็น tuple [ชื่อ, สี] (pure, ห้าม throw): tier ตัวเลขอ่านจาก TIERS ของเกมก่อน ไม่มีค่อยใช้ TIER_LBL
+    // build บางตัวส่ง tier เป็นสตริง (เช่น "legendary") จึงต้องรองรับ RAR_LBL ด้วย
+    const tierOf = (item, tiers) => {
+      const tier = item?.tier;
+      if (typeof tier === 'string') {
+        const hit = RAR_LBL[tier];
+        return Array.isArray(hit) ? hit : TIER_LBL[0];
+      }
+      if (tier === undefined || tier === null) return TIER_LBL[0];
+      const row = tiers?.[tier];
+      if (row && typeof row.th === 'string' && typeof row.color === 'string') return [row.th, row.color];
+      return TIER_LBL[Math.min(5, tier)] ?? TIER_LBL[0];
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -381,11 +397,11 @@
     showTab(store.get('tab') || 'main');
 
     // ---------- รายการไอเทม / อีเว้นต์ (ค้นหาด้วยชื่อ) ----------
-    // ระดับความหายาก: ไอเทมใช้ tier (ชื่อและสีตรงกับ TIERS ใน items.js), อีเว้นต์ใช้ rarityFor (ชื่อตรงกับ RARITY ใน rarity.js)
-    const TIER_LBL = [['สามัญ', '#8c918e'], ['ขั้นมนุษย์', '#c9c9c0'], ['ขั้นปฐพี', '#4f9a58'], ['ขั้นฟ้า', '#3f7fc0'], ['ขั้นสวรรค์', '#8a5ac0'], ['ขั้นเซียน', '#d4a838']];
-    const RAR_LBL = { common: ['ธรรมดา', '#8c918e'], uncommon: ['ไม่ธรรมดา', '#4f9a58'], rare: ['หายาก', '#3f7fc0'], epic: ['หายากมาก', '#8a5ac0'], legendary: ['ตำนาน', '#d4a838'] };
+    // ตารางป้ายระดับอยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
+    const TIER_LBL = LOC.TIER_LBL;
+    const RAR_LBL = LOC.RAR_LBL;
     const rarDot = (c) => `<i class="rdot" style="background:${c}"></i>`;
-    const itemRar = (i) => TIER_LBL[Math.min(5, i?.tier ?? 0)] ?? TIER_LBL[0];
+    const itemRar = (i) => LOC.tierOf(i, TIERS);
     const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
     const evKey = (e) => { try { return SIM?.rarityFor?.(e) ?? 'common'; } catch { return 'common'; } };
     const evRar = (e) => RAR_LBL[evKey(e)] ?? RAR_LBL.common;
@@ -505,6 +521,8 @@
       if (c.martialRanks) {
         $('h_mrank').innerHTML = c.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
       }
+      // ต้องตั้ง TIERS ก่อน drawItems() เพราะรายการไอเทมอ่านป้ายระดับจากตารางของเกม
+      TIERS = c.tiers;
       if (c.items) {
         ITEMS = c.items;
         // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
@@ -512,7 +530,6 @@
           .sort((a, b) => a.slot.localeCompare(b.slot) || (a.tier ?? 0) - (b.tier ?? 0));
         drawItems();
       } else $('hqn').textContent = ITEMS_FAIL;
-      TIERS = c.tiers;
       // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404)
       $('hevn').textContent = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
       fresh(true);

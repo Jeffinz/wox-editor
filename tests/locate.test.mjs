@@ -53,6 +53,23 @@ test('tiers and martialRanks match their first rows', () => {
   assert.equal(LOC.IS.martialRanks(tiers), false);
 });
 
+test('tierOf อ่าน tier ตัวเลขจากตาราง TIERS ของเกม', () => {
+  // ค่าต่างจาก TIER_LBL[0] โดยตั้งใจ: ถ้า tierOf ไม่สนใจ tiers เทสนี้ต้อง fail
+  const tiers = [{ th: 'ทดสอบ', en: 'Test', color: '#123456' }];
+  assert.deepEqual(LOC.tierOf({ tier: 0 }, tiers), ['ทดสอบ', '#123456']);
+  assert.deepEqual(LOC.tierOf({ tier: 3 }, null), LOC.TIER_LBL[3]);
+});
+
+test('tierOf อ่าน tier แบบสตริงจาก RAR_LBL', () => {
+  assert.deepEqual(LOC.tierOf({ tier: 'legendary' }, null), LOC.RAR_LBL.legendary);
+  assert.deepEqual(LOC.tierOf({ tier: 'weird' }, null), LOC.TIER_LBL[0]);
+});
+
+test('tierOf คืนป้ายแรกเมื่อไม่มี tier', () => {
+  assert.deepEqual(LOC.tierOf({}, null), LOC.TIER_LBL[0]);
+  assert.deepEqual(LOC.tierOf(undefined, null), LOC.TIER_LBL[0]);
+});
+
 test('chunkChain reads the real mwkobenp chain', (t) => {
   if (!haveBundle) return t.skip('run node tools/fetch-bundle.mjs first');
   const index = readFileSync(new URL('index.html', BUNDLE), 'utf8');
