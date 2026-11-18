@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.4.5
+// @version      3.4.6
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -134,9 +134,16 @@
     };
     // ค่าที่จะเขียนลงช่องที่ว่างแล้วควรคงค่าเดิม (pure): ช่องว่าง/ไม่ใช่ตัวเลข → ใช้ค่าเดิม (ไม่ใช่ตัวเลข → 0)
     const numOrKeep = (x, prev) => numOr(x) ?? (Number.isFinite(prev) ? prev : 0);
+    // คีย์ของช่องที่ fresh() เขียนค่าลงไป (pure, ห้าม throw): ช่องกระเป๋าใช้ "b:<ไอเทม>", ช่องอื่นใช้ id
+    // ใช้เป็นกุญแจของชุดช่องที่ผู้ใช้แก้แล้วยังไม่บันทึก (dirty) ช่องที่ไม่ใช่ของ state คืน null
+    const fieldKey = (f) => {
+      if (f?.b != null) return 'b:' + f.b;
+      const id = String(f?.id ?? '');
+      return id === 'hm' || /^(h_|s_)/.test(id) ? id : null;
+    };
     // ช่องที่ fresh() เขียนค่าจากเกมลงไป (pure, ห้าม throw): ผู้ใช้พิมพ์ในช่องพวกนี้แล้วยังไม่บันทึก รอบรีเฟรชต้องไม่ทับ
     // ช่องค้นหา/กรอง/ช่วยเลือกไม่นับ เพราะ fresh() ไม่แตะ
-    const isStateField = (f) => f?.b != null || f?.id === 'hm' || /^(h_|s_)/.test(String(f?.id ?? ''));
+    const isStateField = (f) => fieldKey(f) !== null;
     // คีย์จำผลสแกนของการ์ด (pure): เปลี่ยนเมื่อการ์ด/การตั้งค่าเปลี่ยน หรือเมื่อ sim เพิ่งมาถึง
     const aiKey = (sig, simOn) => (simOn ? '1' : '0') + '|' + String(sig ?? '');
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
@@ -167,8 +174,9 @@
     // แผงเก่าของสคริปต์เราที่ควรถูกลบหรือไม่ (pure): ต้องเป็น div ลูกตรงของ body ที่มี shadow root
     // ตัวระบุคือ aria-label ของ .w#w ซึ่งมีทุกรุ่นตั้งแต่ v3.0.0 ถึง v3.3.1; ข้อความในเนื้อหาไม่นับ (ของคนอื่นอาจมีคำเดียวกัน)
     const isStalePanel = (info) => !!info && info.tag === 'DIV' && info.hasShadow === true && info.ours !== true && info.label === 'WoX Editor';
-    // ข้อความเดียวของแท็บอีเว้นต์/ช่วยเลือกเมื่อยังไม่รองรับเกมแบบ bundle (ทุกจุดที่พูดเรื่องนี้ใช้ค่านี้)
-    const EV_UNSUPPORTED = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
+    // ข้อความเดียวของแท็บอีเว้นต์/ช่วยเลือกเมื่อ sim ของเกมยังใช้ไม่ได้ (ทุกจุดที่พูดเรื่องนี้ใช้ค่านี้)
+    // เกมแบบ bundle รองรับแล้ว (v3.4.0) ข้อความนี้จึงไม่ควรบอกว่า "ยังไม่รองรับ" อีก (C8)
+    const EV_UNSUPPORTED = 'อีเว้นต์/ช่วยเลือก: sim ของเกมยังใช้ไม่ได้';
     // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore() (ตรวจระบบกับตรวจอัปเดตอ่านชุดเดียวกัน)
     const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
     // ฟิลด์ของ state ที่แผงแก้ได้: กลุ่มแรกต้องมี กลุ่มหลังมีหรือไม่มีก็ได้ตามเส้นทางของตัวละคร
@@ -189,6 +197,16 @@
       });
     };
     // บรรทัด state ในแผงตรวจระบบ (pure, ห้าม throw): ฟิลด์ไม่บังคับมีหรือไม่มีก็ไม่ใช่ error
+    // ฟิลด์ไม่บังคับวนจาก STATE_OPTIONAL (ที่เดียว) ฟิลด์ที่ยังไม่มีตัวเรนเดอร์ขึ้นบรรทัดกลาง ๆ เอง
+    const OPTIONAL_TEXT = {
+      martial: (v) => (v ? '✔ martial' : '– martial: ไม่มี (ตัวละครไม่ได้อยู่สายยุทธ์)'),
+      // pending รูปร่างไม่ตรง (เกมเปลี่ยนรูปแบบ) ต้องบอกอย่างนั้น ไม่ใช่พิมพ์ undefined ออกมา
+      pending: (v) => {
+        if (!v) return '– pending: ไม่มีอีเว้นต์ค้าง';
+        const ok = typeof v === 'object' && typeof v.kind === 'string' && v.kind !== '' && v.id != null;
+        return ok ? `✔ pending: ${v.kind} ${v.id}` : '– pending: รูปร่างไม่ตรง';
+      },
+    };
     const stateLines = (t, statKeys) => {
       if (!t) return ['– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)'];
       const out = [];
@@ -196,8 +214,10 @@
       out.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
       const sm = (statKeys ?? []).filter((k) => t.stats?.[k] === undefined);
       if (sm.length) out.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
-      out.push(t.martial ? '✔ martial' : '– martial: ไม่มี (ตัวละครไม่ได้อยู่สายยุทธ์)');
-      out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
+      for (const k of STATE_OPTIONAL) {
+        const v = t[k];
+        out.push(OPTIONAL_TEXT[k] ? OPTIONAL_TEXT[k](v) : v === undefined ? `– ${k}: ไม่มี` : `✔ ${k}`);
+      }
       return out;
     };
     const SIM_KEYS = ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'];
@@ -239,7 +259,11 @@
       return { src: out, n };
     };
     // บรรทัดเปิด sim ต่อท้าย app module (pure; รายชื่อคีย์ในฟังก์ชันเองเพราะ shim ฝังด้วย toString)
-    const simPatch = (names) => ';window.__woxSim={' + ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'].map((k) => k + ':' + names[k]).join(',') + '};';
+    // ห้ามอ้าง SIM_KEYS ที่นี่ — เทส tests/sim.test.mjs บังคับให้ทั้งสามที่ตรงกัน
+    const simPatch = (names) => {
+      const keys = ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'];
+      return ';window.__woxSim={' + keys.map((k) => k + ':' + names[k]).join(',') + '};';
+    };
     // import map สำหรับ app URL เดียว (pure)
     const importMapJson = (appUrl, shimUrl) => JSON.stringify({ imports: { [String(appUrl)]: String(shimUrl) } });
     // บรรทัดสถานะ sim ในแผงตรวจระบบ (pure, ห้าม throw); ข้อความตามสเปค v3.4.0
@@ -284,11 +308,11 @@
       if (!Array.isArray(scores) || scores.length < 2) return false;
       return scores.every((s) => s === scores[0]);
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, isStateField, aiKey, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, fieldKey, isStateField, aiKey, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.4.5'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.4.6'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
@@ -689,7 +713,8 @@
     // ตารางป้ายระดับอยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
     const TIER_LBL = LOC.TIER_LBL;
     const RAR_LBL = LOC.RAR_LBL;
-    const rarDot = (c) => `<i class="rdot" style="background:${c}"></i>`;
+    // สีมาจากตาราง TIERS ของเกม (ข้อมูลนอกสคริปต์) จึงต้องผ่าน esc เหมือนค่าอื่นที่เขียนลง HTML (N4)
+    const rarDot = (c) => `<i class="rdot" style="background:${esc(c)}"></i>`;
     const itemRar = (i) => LOC.tierOf(i, TIERS);
     const RAR_ORDER = LOC.RAR_ORDER;
     const evKey = (e) => { try { return SIM?.rarityFor?.(e) ?? 'common'; } catch { return 'common'; } };
@@ -879,28 +904,44 @@
     const getCore = () => corePromise ?? startCore();
     startCore();
     // sim มาถึงทีหลังเกมโหลด: drawEvents จัดการทั้งกรณีมีและไม่มี sim (แสดงเหตุผลเมื่อไม่มี)
-    simReady.then(() => { drawEvents(); aiScan(); });
+    // ความล้มเหลวของฝั่งหนึ่งต้องไม่ทำให้อีกฝั่งไม่ทำงาน และต้องมีข้อความถึงผู้ใช้ ไม่ใช่ unhandled rejection (C3)
+    simReady.then(() => {
+      try { drawEvents(); } catch (e) { console.error('[WoX Editor]', e); toast('วาดแท็บอีเว้นต์ไม่ได้ ดู console', true); }
+      try { aiScan(); } catch (e) { console.error('[WoX Editor]', e); }
+    });
 
     // ---------- แสดงค่าปัจจุบัน ----------
     const name = (id) => ITEMS?.[id]?.th ?? id;
-    let dirty = false, lastBagSig = '';
-    // ผู้ใช้แก้ช่องที่ fresh() เขียนทับ: หยุดรีเฟรชเป็นรอบจนกว่าจะกดบันทึก (fresh(true) ล้าง)
-    root.addEventListener('input', (e) => { if (LOC.isStateField({ id: e.target.id, b: e.target.dataset?.b })) dirty = true; });
+    // escape id สำหรับ attribute selector (ใช้กับช่องกระเป๋าที่ไม่มี id มีแต่ data-b)
+    const CSS_ESC = (s) => (window.CSS?.escape ? window.CSS.escape(s) :String(s).replace(/"/g, '\\"'));
+    let lastBagSig = '';
+    // ช่องที่ผู้ใช้แก้แล้วยังไม่บันทึก: fresh() ข้ามเฉพาะช่องในชุดนี้ ช่องอื่นรีเฟรชตามปกติ
+    // (เดิมเป็น boolean ตัวเดียว: พิมพ์ค้างช่องเดียวแล้วคลิกออกไปโดยไม่บันทึก = ทั้งแผงหยุดรีเฟรชตลอด session — N1)
+    const dirty = new Set();
+    const bagInput = (id) => root.querySelector(`[data-b="${CSS_ESC(id)}"]`);
+    // ช่องของคีย์นี้ ถ้าไม่มีแล้ว (แถวกระเป๋าถูกลบในเกม) ต้องปลดคีย์ออก ไม่ให้ล็อกช่องที่ไม่มีอยู่ตลอดไป
+    const dirtyEl = (k) => (k.startsWith('b:') ? bagInput(k.slice(2)) : $(k));
+    root.addEventListener('input', (e) => {
+      const k = LOC.fieldKey({ id: e.target.id, b: e.target.dataset?.b });
+      if (k) dirty.add(k);
+    });
     const fresh = (force) => {
       if (!t) return false;
-      // ค่าที่ผู้ใช้พิมพ์ค้างไว้ยังไม่บันทึก: ไม่เขียนทับทั้งช่องกรอกและกระเป๋า
-      if (!force && dirty) return true;
-      dirty = false;
+      for (const k of [...dirty]) if (!dirtyEl(k)) dirty.delete(k);
+      // ช่องที่ค้างอยู่ไม่ถูกเขียนทับ (ค่าที่พิมพ์ไว้ยังอยู่) แต่ช่องอื่นได้ค่าล่าสุดจากเกม
+      const fill = (id, v) => { if (!dirty.has(id)) $(id).value = v; };
       $('h_mst').textContent = t.martial ? '' : 'ตัวละครนี้ไม่ได้อยู่สายยุทธ์ จึงแก้ส่วนนี้ไม่ได้';
-      if (t.martial) { $('h_mrank').value = t.martial.rank; $('h_mstage').value = t.martial.stage; $('h_mforce').value = Math.round(t.martial.force ?? 0); }
-      $('h_karma').value = t.karma ?? 0; $('h_fame').value = t.fame ?? 0;
-      $('h_realm').value = t.realm ?? 0; $('h_layer').value = t.layer ?? 0; $('h_qi').value = Math.round(t.qi ?? 0);
-      $('hm').value = t.money;
-      for (const [k] of STATS) $('s_' + k).value = t.stats?.[k] ?? '';
+      if (t.martial) { fill('h_mrank', t.martial.rank); fill('h_mstage', t.martial.stage); fill('h_mforce', Math.round(t.martial.force ?? 0)); }
+      fill('h_karma', t.karma ?? 0); fill('h_fame', t.fame ?? 0);
+      fill('h_realm', t.realm ?? 0); fill('h_layer', t.layer ?? 0); fill('h_qi', Math.round(t.qi ?? 0));
+      fill('hm', t.money);
+      for (const [k] of STATS) fill('s_' + k, t.stats?.[k] ?? '');
       // สร้างแถวกระเป๋าใหม่เฉพาะเมื่อกระเป๋าเปลี่ยน: สร้างใหม่ทุกรอบจะแทนปุ่ม "ตั้ง/ลบ" ระหว่างผู้ใช้กดจนคลิกหาย
+      // แถวที่มีช่องพิมพ์ค้างอยู่ (bagLocked) ห้ามสร้างใหม่ ไม่งั้นค่าที่พิมพ์หาย
       const bag = t.bag ?? {};
       const bagSig = JSON.stringify(bag);
-      if (force || bagSig !== lastBagSig) {
+      const bagLocked = [...dirty].some((k) => k.startsWith('b:'));
+      if (!bagLocked && (force || bagSig !== lastBagSig)) {
         lastBagSig = bagSig;
         $('hbag').innerHTML = Object.keys(bag).length
           ? Object.entries(bag).map(([id, n]) => `<div class="bagrow"><span class="nm">${ITEMS?.[id] ? rarDot(itemRar(ITEMS[id])[1]) + ' ' : ''}${esc(name(id))}${ITEMS?.[id] ? ` <small class="rtxt">· ${esc(itemRar(ITEMS[id])[0])}</small>` : ''}</span><input data-b="${esc(id)}" type="number" value="${esc(n)}" aria-label="จำนวน ${esc(name(id))}"><button class="b" data-bset="${esc(id)}">ตั้ง</button><button class="b dng" data-bdel="${esc(id)}" aria-label="ลบ ${esc(name(id))}">ลบ</button></div>`).join('')
@@ -933,11 +974,14 @@
       if (b.id === 'hchkb') return runHealth();
       if (!t) return toast('ยังไม่ได้รับข้อมูลเกม ให้เล่นในเกมสัก 1 เดือนก่อน', true);
       let msg = 'บันทึกแล้ว';
+      // คีย์ของช่องที่รอบนี้เขียนลง state จริง: ล้างเฉพาะช่องนั้นออกจาก dirty ช่องอื่นที่พิมพ์ค้างไว้ต้องไม่ถูกเขียนทับ (N1)
+      const saved = new Set();
       // ช่องว่าง/ไม่ใช่ตัวเลข = ไม่เขียนอะไรทับค่าเดิม (เดิมเขียน 0 ทับ) แล้วบอกผู้ใช้
       if (b.id === 'hmb') {
         const money = LOC.numOr($('hm').value);
         if (money === null) return toast('ใส่ตัวเลขก่อน', true);
         t.money = money;
+        saved.add('hm');
       } else if (b.id === 'hmr') {
         if (!t.martial) return toast('ตัวละครนี้ไม่ได้อยู่สายยุทธ์', true);
         // ยังอ่านตาราง MARTIAL_RANKS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ rank 0 ทับค่าเดิม
@@ -947,10 +991,12 @@
         t.martial.rank = rank;
         t.martial.stage = LOC.numOrKeep($('h_mstage').value, t.martial.stage);
         t.martial.force = LOC.numOrKeep($('h_mforce').value, t.martial.force);
+        for (const k of ['h_mrank', 'h_mstage', 'h_mforce']) saved.add(k);
       } else if (d.n) {
         const v = LOC.numOr($('h_' + d.n).value);
         if (v === null) return toast('ใส่ตัวเลขก่อน', true);
         t[d.n] = v;
+        saved.add('h_' + d.n);
       } else if (b.id === 'hrl') {
         // ยังอ่านตาราง REALMS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ realm 0 ทับค่าเดิม
         if (!$('h_realm').options.length) return toast('ยังอ่านตารางขั้นพลังไม่ได้ รอสักครู่แล้วลองใหม่', true);
@@ -960,21 +1006,24 @@
         t.layer = LOC.numOrKeep($('h_layer').value, t.layer);
         t.qi = LOC.numOrKeep($('h_qi').value, t.qi);
         if (t.realm > 0) t.cultivating = true;
+        for (const k of ['h_realm', 'h_layer', 'h_qi']) saved.add(k);
       } else if (d.s) {
         const v = LOC.numOr($('s_' + d.s).value);
         if (v === null) return toast('ใส่ตัวเลขก่อน', true);
         setStat(d.s, v);
+        saved.add('s_' + d.s);
       } else if (b.id === 'hsa') {
         // ข้ามช่องที่ว่าง เขียนเฉพาะช่องที่มีค่า; ว่างทั้งหมด = ไม่ทำอะไรและบอกผู้ใช้
         const filled = STATS.map(([k]) => [k, LOC.numOr($('s_' + k).value)]).filter(([, v]) => v !== null);
         if (!filled.length) return toast('ใส่ตัวเลขก่อน', true);
-        for (const [k, v] of filled) setStat(k, v);
+        for (const [k, v] of filled) { setStat(k, v); saved.add('s_' + k); }
       } else if (d.bset) {
-        const n = LOC.numOr(root.querySelector(`[data-b="${CSS_ESC(d.bset)}"]`).value);
+        const n = LOC.numOr(bagInput(d.bset).value);
         if (n === null) return toast('ใส่ตัวเลขก่อน', true);
         const v = Math.max(0, n); // 0 = ลบไอเทม; ตัวเลขติดลบไม่มีความหมาย จึงนับเป็น 0
         (t.bag ??= {}); v ? (t.bag[d.bset] = v) : delete t.bag[d.bset];
-      } else if (d.bdel) { delete t.bag[d.bdel]; msg = 'ลบแล้ว'; }
+        saved.add('b:' + d.bset);
+      } else if (d.bdel) { delete t.bag[d.bdel]; saved.add('b:' + d.bdel); msg = 'ลบแล้ว'; }
       else if (b.id === 'hadd') {
         const id = $('hit').value, n = LOC.numOr($('hn').value);
         if (!ITEMS?.[id]) return toast('เลือกไอเทมจากรายการก่อน', true);
@@ -983,16 +1032,23 @@
         msg = `เพิ่ม ${name(id)} ×${n} แล้ว`;
       } else if (b.id === 'hevb') {
         if (!SIM) return toast(LOC.EV_UNSUPPORTED + (simError ? ' — ' + simError : ''), true);
-        const ev = SIM.majorEvent($('hevl').value);
-        if (!ev) return toast('เลือกอีเว้นต์จากรายการก่อน', true);
-        if (t.pending && !confirm('ตอนนี้มีอีเว้นต์ค้างอยู่ จะเขียนทับไหม')) return;
-        t.pending = { kind: 'major', id: ev.id, options: SIM.openOptions(t, ev), rarity: SIM.rarityFor(ev) };
-        msg = `เรียก "${evTitle(ev)}" แล้ว ทำอะไรในเกมสักอย่างเพื่อให้การ์ดขึ้น`;
+        // sim throw ต้องมีข้อความถึงผู้ใช้ ไม่ใช่ปล่อยให้ปุ่มเงียบโดยไม่มี toast (C4)
+        // t.pending ยังไม่ถูกเขียนถ้า throw เพราะ object ถูกสร้างเสร็จก่อน assignment
+        try {
+          const ev = SIM.majorEvent($('hevl').value);
+          if (!ev) return toast('เลือกอีเว้นต์จากรายการก่อน', true);
+          if (t.pending && !confirm('ตอนนี้มีอีเว้นต์ค้างอยู่ จะเขียนทับไหม')) return;
+          t.pending = { kind: 'major', id: ev.id, options: SIM.openOptions(t, ev), rarity: SIM.rarityFor(ev) };
+          msg = `เรียก "${evTitle(ev)}" แล้ว ทำอะไรในเกมสักอย่างเพื่อให้การ์ดขึ้น`;
+        } catch (e) {
+          console.error('[WoX Editor]', e);
+          return toast('sim คำนวณอีเว้นต์นี้ไม่สำเร็จ — ' + (e?.message ?? e), true);
+        }
       } else return;
-      fresh(true);
+      for (const k of saved) dirty.delete(k);
+      fresh();
       toast(msg);
     });
-    const CSS_ESC = (s) => (window.CSS?.escape ? window.CSS.escape(s) :String(s).replace(/"/g, '\\"'));
 
     // คีย์ลัด: Enter ในช่องค้นหา/รายการ = เพิ่มไอเทม/เรียกอีเว้นต์, Enter ในช่องตัวเลข = กดปุ่มตั้งของแถวนั้น
     root.addEventListener('keydown', (e) => {
@@ -1109,8 +1165,11 @@
       const best = scored.length && !tie ? scored.reduce((a, r) => (r.sc > a.sc ? r : a)) : null;
       aiOut.textContent = cfg.mark ? (tie ? 'คะแนนเท่ากันทั้งหมด — ไม่กดอัตโนมัติ\n' : '') + known.map((r) => (r === best ? '★ แนะนำ · ' : '') + r.b.textContent.trim().slice(0, 50) + ': ' + (r.blind ? 'ผลไม่ใช่ตัวเลข ประเมินไม่ได้' : 'คะแนน ' + r.sc.toFixed(1)) + (r.p < 1 ? ' · สำเร็จ ~' + Math.round(r.p * 100) + '%' : '')).join('\n') : '';
       if (cfg.mark) aiBadges = known.map((r) => ({ b: r.b, best: r === best, text: (r === best ? '★ แนะนำ' : r.blind ? 'ประเมินไม่ได้' : r.sc.toFixed(1)) + (r.p < 1 ? ' · ~' + Math.round(r.p * 100) + '%' : '') }));
-      if (!cfg.auto) { clearTimeout(aiTimer); aiPend = null; }
-      else if (best && known.length === rows.length && scored.length === rows.length && lastClicked !== t.pending && aiPend !== t.pending) {
+      // ตัวจับเวลากดอัตโนมัติ: รอบนี้ควรกดไหม (auto เปิด + มีตัวชนะ + ทุกตัวประเมินได้ + การ์ดนี้ยังไม่เคยกด)
+      // ถ้าไม่ควรกด ต้องล้างตัวจับเวลาเดิมด้วย ไม่งั้นตัวที่ตั้งไว้รอบก่อนจะยิงแล้วกดทั้งที่คะแนนกลายเป็นเท่ากันแล้ว (N2)
+      const canClick = cfg.auto && !!(best && known.length === rows.length && scored.length === rows.length) && lastClicked !== t.pending;
+      if (!canClick) { clearTimeout(aiTimer); aiPend = null; }
+      else if (aiPend !== t.pending) {
         const pend = t.pending; aiPend = pend; clearTimeout(aiTimer);
         aiTimer = setTimeout(() => {
           aiPend = null;

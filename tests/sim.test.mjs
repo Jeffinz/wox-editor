@@ -75,6 +75,18 @@ test('absolutize ไม่ throw กับค่าที่ไม่ใช่�
   }
 });
 
+test('simNames/simPatch ประกาศรายชื่อคีย์ชุดเดียวกับ SIM_KEYS (กันหลุดสามที่)', () => {
+  // ทั้งสองฟังก์ชันถูกฝังลง shim ด้วย toString จึงห้ามอ้าง SIM_KEYS ต้องประกาศ const keys ในตัวเอง
+  // เทสนี้คือตัวบังคับให้ทั้งสามที่ตรงกัน: แก้ชื่อคีย์ที่ไหนแล้วไม่อัปเดตที่เหลือ จะ fail ที่นี่
+  const keysOf = (fn) => {
+    const m = fn.toString().match(/const keys = \[([^\]]*)\]/);
+    assert.ok(m, fn.name + ' ต้องประกาศ const keys ในตัวเอง');
+    return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  };
+  assert.deepEqual(keysOf(LOC.simNames), LOC.SIM_KEYS);
+  assert.deepEqual(keysOf(LOC.simPatch), LOC.SIM_KEYS);
+});
+
 test('simNames ตอบ null เมื่อชื่อใดชื่อหนึ่งมีสองที่ประกาศ', () => {
   const fn = 'function a(e,t=b(e.pending?.id),n=e.pending?.npc){}';
   assert.equal(LOC.simNames(fn + fn), null);

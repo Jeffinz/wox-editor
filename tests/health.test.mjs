@@ -82,6 +82,19 @@ test('stateLines: optional fields present', () => {
   assert.deepEqual(lines, ['✔ state ครบ', '✔ martial', '✔ pending: major ev1']);
 });
 
+test('stateLines: pending รูปร่างไม่ตรงบอกว่ารูปร่างผิด ไม่พิมพ์ undefined', () => {
+  for (const bad of [{}, { kind: 'major' }, { id: 'ev1' }, { kind: '', id: 'ev1' }, 'ev1']) {
+    assert.deepEqual(LOC.stateLines({ ...FULL, pending: bad }, STATS).slice(-1), ['– pending: รูปร่างไม่ตรง'], JSON.stringify(bad));
+  }
+});
+
+test('stateLines: บรรทัดของฟิลด์ไม่บังคับมาจาก STATE_OPTIONAL ไม่ใช่รายการที่เขียนซ้ำในฟังก์ชัน', () => {
+  const lines = LOC.stateLines(FULL, STATS);
+  for (const k of LOC.STATE_OPTIONAL) {
+    assert.equal(lines.filter((l) => l.includes(k)).length, 1, 'ต้องมีบรรทัดของ ' + k + ' หนึ่งบรรทัด');
+  }
+});
+
 test('health tables live in LOC so the DOM code cannot drift', () => {
   assert.deepEqual(LOC.TABLES, [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']]);
   assert.deepEqual(LOC.STATE_REQUIRED, ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi']);

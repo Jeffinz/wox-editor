@@ -23,7 +23,8 @@ test('keepTables accepts null on both sides', () => {
 });
 
 test('EV_UNSUPPORTED is one message for every place that says it', () => {
-  assert.equal(LOC.EV_UNSUPPORTED, 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle');
+  // เกมแบบ bundle รองรับแล้ว (v3.4.0): ข้อความนี้ใช้ตอน sim ใช้ไม่ได้เท่านั้น จึงไม่พูดว่า "ยังไม่รองรับ"
+  assert.equal(LOC.EV_UNSUPPORTED, 'อีเว้นต์/ช่วยเลือก: sim ของเกมยังใช้ไม่ได้');
 });
 
 test('numOrKeep keeps the old value for empty or bad input', () => {
