@@ -1,7 +1,9 @@
 // ABOUTME: Release helper for wox-editor.user.js: checks version sync, syntax, then commits and pushes.
+// ABOUTME: Refuses to release when any test was skipped, so a missing bundle cannot pass silently.
 // ABOUTME: Usage: node tools/release.mjs [--dry-run] "message"   (bump @version and VERSION first)
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { skippedCount } from './test-summary.mjs';
 
 const args = process.argv.slice(2);
 const dry = args.includes('--dry-run');
@@ -29,9 +31,12 @@ if (last && dirty && !gt(header, last)) fail(`ไฟล์เปลี่ยน�
 
 run('node', ['--check', file]);
 // ไฟล์ tests อยู่ในโฟลเดอร์ tests/ (Node เวอร์ชันนี้ไม่รับ path โฟลเดอร์ตรง ๆ จึงส่ง glob)
-try { run('node', ['--test', 'tests/**/*.test.mjs']); } catch (e) { fail('เทสไม่ผ่าน\n' + ([e.stdout, e.stderr].filter(Boolean).join('\n') || e.message)); }
+const out = (() => { try { return run('node', ['--test', 'tests/**/*.test.mjs']); } catch (e) { fail('เทสไม่ผ่าน\n' + ([e.stdout, e.stderr].filter(Boolean).join('\n') || e.message)); } })();
+// เทสที่ skip ตัว (เช่นไม่มี bundle/) คือเทสเขียวหลอก: ต้องได้ skipped 0 จริง ๆ
+const skipped = skippedCount(out);
+if (skipped !== 0) fail(`เทสถูกข้าม ${skipped < 0 ? 'ทั้งชุด (ไม่พบบรรทัดสรุป)' : skipped + ' ตัว'} — ต้องได้ skipped 0 (ตั้ง WOX_BUNDLE หรือรัน tools/fetch-bundle.mjs ก่อน)`);
 console.log(`✔ version ${header} (ก่อนหน้า ${last ?? 'ไม่มี'}), syntax และเทสผ่าน`);
 if (dry) { console.log('dry-run: ไม่ commit/push'); process.exit(0); }
-run('git', ['add', file, 'tools/release.mjs', 'tests/', '.gitignore', 'CLAUDE.md', 'AGENTS.md']);
+run('git', ['add', file, 'tools/release.mjs', 'tools/test-summary.mjs', 'tests/', '.gitignore', 'CLAUDE.md', 'AGENTS.md']);
 console.log(run('git', ['commit', '-m', msg]));
 console.log(run('git', ['push']));
