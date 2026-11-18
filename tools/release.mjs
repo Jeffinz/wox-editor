@@ -23,6 +23,9 @@ if (header !== konst) fail(`@version (${header}) ไม่ตรงกับ VER
 if (!/@updateURL\s+https:\/\//.test(src) || !/@downloadURL\s+https:\/\//.test(src)) fail('ไม่มี @updateURL/@downloadURL');
 
 const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8' }).trim();
+// @updateURL/@downloadURL ชี้ main: commit จาก branch อื่นผู้ใช้จะไม่เห็นอัปเดต และ merge ทีหลังจะชน version (R8)
+const branch = run('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+if (branch !== 'main') fail(`ต้องรันบน main (ตอนนี้อยู่ branch ${branch}) — merge เข้า main ก่อนแล้ว bump version ที่นั่น`);
 let last = null;
 try { last = run('git', ['show', `HEAD:${file}`]).match(/@version\s+(\S+)/)?.[1]; } catch { /* first commit */ }
 const gt = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
@@ -38,5 +41,8 @@ if (skipped !== 0) fail(`เทสถูกข้าม ${skipped < 0 ? 'ทั�
 console.log(`✔ version ${header} (ก่อนหน้า ${last ?? 'ไม่มี'}), syntax และเทสผ่าน`);
 if (dry) { console.log('dry-run: ไม่ commit/push'); process.exit(0); }
 run('git', ['add', file, 'tools/release.mjs', 'tools/test-summary.mjs', 'tests/', '.gitignore', 'CLAUDE.md', 'AGENTS.md']);
-console.log(run('git', ['commit', '-m', msg]));
+// commit รอบก่อนอาจสำเร็จแต่ push ล้ม: รันซ้ำต้อง push ต่อได้ ไม่ใช่ตายที่ "nothing to commit" (R8)
+let staged = true;
+try { run('git', ['diff', '--cached', '--quiet']); staged = false; } catch { /* มีไฟล์ staged ให้ commit */ }
+console.log(staged ? run('git', ['commit', '-m', msg]) : 'ไม่มีอะไรให้ commit — ข้ามไป push');
 console.log(run('git', ['push']));
