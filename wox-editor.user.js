@@ -1040,7 +1040,7 @@
         let p = 1;
         try {
           if (typeof opt.band === 'number') p = opt.band;
-          else if (opt.chance?.stat) p = SIM.statOdds(t, opt.chance, ev);
+          else if (opt.chance?.stat) p = SIM.statOdds(t, opt.chance, ev, opt);
         } catch { p = 0.5; }
         if (!(p >= 0 && p <= 1)) p = 0.5;
         const okS = opt.outcomes?.length
@@ -1077,8 +1077,8 @@
         placeBadges();
       });
     });
-    // เกมแบบ bundle ไม่มี SIM = ไม่มีแหล่งข้อมูลอีเว้นต์ให้เฝ้า จึงไม่เริ่ม observer จนงาน (ก) ต่อข้อมูลจริง
-    if (SIM) aiObs.observe(document.body, { childList: true, subtree: true });
+    // sim มาถึงทีหลัง (shim ~1.7 วินาที) จึงต้องเฝ้าตั้งแต่ต้น; aiScan ออกเร็วเมื่อยังไม่มี SIM
+    aiObs.observe(document.body, { childList: true, subtree: true });
 
     // ---------- ตรวจระบบหลังเกมอัปเดต: ตารางจาก chunk หลัก + ฟิลด์ของ state ----------
     // ตารางและฟิลด์ state อยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
