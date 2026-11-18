@@ -18,7 +18,7 @@ Written: 2026-11-18 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xia
 ## Where things stand
 
 - branch `fix/audit-v342` merge เข้า `main` แบบ ff แล้ว, worktree และ branch ถูกลบแล้ว (branch เก่า `audit/2026-11-18` ลบแล้วตามที่นายท่านสั่ง)
-- ยังไม่ได้ทดสอบ v3.4.3 ในเกมจริง
+- v3.4.3 ตรวจในเกมแล้วผ่านทุกข้อ ยกเว้นการกดอัตโนมัติเมื่อตัวเลือกไม่มี `fx` (ข้อจำกัดเดิม ไม่ใช่บั๊ก)
 
 ## Changes made (v3.4.2 → v3.4.3)
 
