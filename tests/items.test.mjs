@@ -29,14 +29,14 @@ test('itemOrder never throws on missing or odd slot', () => {
   assert.equal(Number.isNaN(LOC.itemOrder({ tier: 'epic' }, { tier: 'common' })), false);
 });
 
-test('tierMatches: ไอเทมระดับชื่อกรองด้วย "r:" และไม่ปนกับตัวกรองขั้นของเกม', () => {
-  assert.equal(LOC.tierMatches({ tier: 'epic' }, 'r:epic'), true);
-  assert.equal(LOC.tierMatches({ tier: 'epic' }, 'r:rare'), false);
-  assert.equal(LOC.tierMatches({ tier: 'epic' }, '4'), false); // ป้าย "หายากมาก" ต้องไม่ไปโผล่ใน "ขั้นสวรรค์"
-  assert.equal(LOC.tierMatches({ tier: 4 }, 'r:epic'), false); // ไอเทมขั้น 4 ต้องไม่ไปโผล่ในตัวกรองระดับชื่อ
+test('tierMatches: ไอเทมระดับชื่อกรองด้วยขั้นของเกมที่มีสีเดียวกัน', () => {
+  assert.equal(LOC.tierMatches({ tier: 'epic' }, '4'), true); // ม่วง = ขั้นสวรรค์
+  assert.equal(LOC.tierMatches({ tier: 'legendary' }, '4'), false);
+  assert.equal(LOC.tierMatches({ tier: 'legendary' }, '5'), true);
   assert.equal(LOC.tierMatches({ tier: 4 }, '4'), true);
+  assert.equal(LOC.tierMatches({ tier: 4 }, '5'), false);
   assert.equal(LOC.tierMatches({ tier: '3' }, '3'), true);
   assert.equal(LOC.tierMatches({ tier: 'weird' }, '3'), true); // รู้ระดับไม่ได้: เห็นทุกตัวกรอง
-  assert.equal(LOC.tierMatches({ tier: 'weird' }, 'r:epic'), true);
+  assert.equal(LOC.tierMatches({ tier: 'weird' }, 'all'), true);
   assert.equal(LOC.tierMatches({ tier: 5 }, 'all'), true);
 });

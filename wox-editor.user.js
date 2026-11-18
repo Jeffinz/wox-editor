@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.3.2
+// @version      3.3.3
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -111,14 +111,11 @@
       if (x === null || y === null) return (x === null) - (y === null) || slot(a).localeCompare(slot(b));
       return y - x || slot(a).localeCompare(slot(b));
     };
-    // ไอเทมผ่านตัวกรองระดับไหม (pure): "all" ผ่านหมด
-    // ไอเทมระดับชื่อ ("epic") ตรงกับตัวกรอง "r:<ชื่อ>" เท่านั้น; ไอเทมขั้นตัวเลขตรงกับตัวกรองขั้นของเกม
-    // ระดับที่รู้ไม่ได้ผ่านทุกตัวกรอง (เหมือนของเดิม)
+    // ไอเทมผ่านตัวกรองระดับไหม (pure): "all" ผ่านหมด; ระดับที่รู้ไม่ได้ผ่านทุกตัวกรอง (เหมือนของเดิม)
+    // ตัวกรองมีชุดเดียวคือขั้นของเกม (index 0-5) เพราะไอเทมที่แผงแสดงใช้ tier ตัวเลขชุดเดียวกับตาราง TIERS
     const tierMatches = (item, filter) => {
       const f = String(filter ?? 'all');
       if (f === 'all') return true;
-      const rar = rarKey(item?.tier);
-      if (rar) return f === 'r:' + rar;
       const k = tierIdx(item?.tier);
       return k === null || String(k) === f;
     };
@@ -197,7 +194,7 @@
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.3.2'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.3.3'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
   // tables = ตารางที่อ่านได้สะสมข้ามรอบ (F2); chainCache = ชื่อ chunk ที่หาได้แล้ว ใช้ข้าม fetch สามไฟล์ตอน retry (R2)
@@ -533,11 +530,9 @@
     const evKey = (e) => { try { return SIM?.rarityFor?.(e) ?? 'common'; } catch { return 'common'; } };
     const evRar = (e) => RAR_LBL[evKey(e)] ?? RAR_LBL.common;
     // ลำดับชั้นของไอเทม: ใช้ LOC.tierIdx (null = จับคู่แถว TIERS ไม่ได้)
-    // ตัวเลือกระดับในช่องกรองมีสองกลุ่ม เพราะไอเทม tier เป็นได้ทั้งตัวเลข (ขั้นของเกม 0-5) และชื่อ (RAR_LBL)
-    // ถ้ามีแต่กลุ่มตัวเลข ผู้ใช้จะกรองตามป้ายที่เห็นบนไอเทม ("[ตำนาน]") ไม่ได้
-    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' +
-      TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('') +
-      '<optgroup label="ความหายาก">' + RAR_ORDER.map((k) => `<option value="r:${k}">${RAR_LBL[k][0]}</option>`).join('') + '</optgroup>';
+    // ตัวเลือกกรองมีชุดเดียวคือขั้นของเกม เพราะไอเทมที่แผงแสดง (ตารางที่มี woodSword) ใช้ tier ตัวเลขชุดเดียวกับ TIERS
+    // ไอเทมที่ tier เป็นชื่อ (ชุดเครื่องประดับ) อยู่ในตารางอีกตัวที่ IS.items ไม่รับ จึงไม่ต้องมีตัวเลือกให้กรอง
+    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' + TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('');
     $('hevr').innerHTML = '<option value="all">ทุกระดับ</option>' + RAR_ORDER.map((k) => `<option value="${k}">${RAR_LBL[k][0]}</option>`).join('');
     let itemList = [];
     const drawItems = () => {
