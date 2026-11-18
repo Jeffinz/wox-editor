@@ -1,68 +1,37 @@
-# Handoff: v3.4.3 ปล่อยแล้ว — รอนายท่านชาโดว์ตรวจในเกม
+# Handoff: v3.4.5 ตรวจบนเว็บแล้ว — คิว T2 ปิด
 
 Written: 2026-11-18 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
 
-**ปล่อยแล้ว:** commit `bfc2796` บน `main` (`4dd4ecc..bfc2796`), raw URL เห็น `@version 3.4.3` แล้ว
-
 อ่าน `CLAUDE.md` ก่อน กติกาอยู่ในนั้น: ตอบภาษาไทยสั้น ๆ, รัน `node --check`, bump `@version` + `VERSION` พร้อมกัน, ปล่อยด้วย `tools/release.mjs`, **ห้ามแยก subagent** (§7)
-
-## Goal
-
-ปิด finding audit 2026-11-18 ห้าข้อ (T1, C1, C5, C2, C6) แล้วปล่อย v3.4.3 — ผล audit อยู่ที่ `docs/superpowers/notes/2026-11-18-audit-v342.md`, แผนที่รันอยู่ที่ `docs/superpowers/plans/2026-11-18-audit-fixes-v342.md`
-
-งานถือว่า "เสร็จ" เมื่อ:
-- v3.4.3 ขึ้น `main` แล้ว raw URL เห็น `@version 3.4.3`
-- เทส `fail 0, skipped 0` ✅ (67/67)
-- นายท่านตรวจในเกมจริงผ่านทุกข้อใน §"รอตรวจในเกม" ✅ ← เหลือข้อนี้
 
 ## Where things stand
 
-- branch `fix/audit-v342` merge เข้า `main` แบบ ff แล้ว, worktree และ branch ถูกลบแล้ว (branch เก่า `audit/2026-11-18` ลบแล้วตามที่นายท่านสั่ง)
-- v3.4.3 ตรวจในเกมแล้วผ่านทุกข้อ ยกเว้นการกดอัตโนมัติเมื่อตัวเลือกไม่มี `fx` (ข้อจำกัดเดิม ไม่ใช่บั๊ก)
+- ปล่อยแล้วบน `main`: v3.4.3 `bfc2796`, v3.4.4 `41faba2`, v3.4.5 `f87864e`; raw URL เห็น `@version 3.4.5`
+- เทส 72/72 skip 0 — `WOX_BUNDLE="C:/Users/PC/Desktop/Wox UI/way-of-xian.wox-game.workers.dev/bundle/mwlnu1rf" node --test "tests/**/*.test.mjs"` (ไม่ตั้ง env จะ skip 5 ตัว และ `release.mjs` จะไม่ปล่อย)
+- นายท่านตรวจบนเว็บแล้ว v3.4.4 + v3.4.5 ผ่าน: อีเว้นต์ที่ตัวเลือกมีแต่ `act` ขึ้นคะแนนและกดอัตโนมัติได้, อีเว้นต์ที่ทุกตัวเลือกคะแนนเท่ากันไม่กดและขึ้นข้อความบอก
 
-## Changes made (v3.4.2 → v3.4.3)
+## สิ่งที่เปลี่ยนใน v3.4.4–v3.4.5
 
-| finding | สิ่งที่แก้ | ไฟล์ |
-|---|---|---|
-| T1 | `release.mjs` อ่านบรรทัด `# skipped` แล้วไม่ปล่อยถ้าไม่ใช่ 0 (fail ปิดเมื่อไม่พบบรรทัดสรุป) | `tools/test-summary.mjs` ใหม่, `tools/release.mjs`, `tests/release.test.mjs` ใหม่ |
-| C1 | แผงรีเฟรชเองทุก 2 วินาที; ข้ามรอบเมื่อ `dirty` (ผู้ใช้พิมพ์ในช่องที่ `LOC.isStateField` รับแล้วยังไม่บันทึก); เลิกใช้ `root.activeElement` | `wox-editor.user.js` |
-| C5 | จำนวนในกระเป๋า `value="${esc(n)}"` | `wox-editor.user.js` |
-| C2 | ช่วยเลือกจำคีย์ที่รวมสถานะ sim (`LOC.aiKey`) — ไม่สแกนซ้ำการ์ดที่ sim ไม่รู้จัก, สแกนใหม่เมื่อ sim เพิ่งมา | `wox-editor.user.js` |
-| C6 | ตัวกรอง `#hqr` อ่านชื่อขั้นจาก `TIERS` (`LOC.tierLabels`) คงค่าเดิมที่เลือกไว้ | `wox-editor.user.js` |
+| เวอร์ชัน | สิ่งที่ทำ |
+|---|---|
+| v3.4.4 (T2) | `fxScore`/`outScore` ย้ายเข้า `LOC` (รับ `statKeys` เป็นพารามิเตอร์เพราะ `STATS` อยู่นอก IIFE); `act` ได้ 0 หรือ −200 เมื่อเข้า `/die|death|kill|dead|perish/i`; `LOC.hasResult` ให้ตัวเลือกที่มี `fx` หรือ `act` นับว่าประเมินได้ |
+| v3.4.5 | `LOC.allTie`: คะแนนเท่ากันหมด (2 ตัวขึ้นไป) → `best = null`, ไม่ติดดาว, ไม่กดอัตโนมัติ, ขึ้น "คะแนนเท่ากันทั้งหมด — ไม่กดอัตโนมัติ" |
 
-เทส 67/67 skip 0 (58 เดิม + `tests/release.test.mjs` 6 + `isStateField` 1 + `aiKey` 1 + `tierLabels` 1)
+เทสใหม่: `tests/scoring.test.mjs` (5 ตัว)
 
-## ข้อจำกัดที่ยอมรับ
+## พฤติกรรมที่ตั้งใจไว้ (อย่าแก้โดยไม่ถาม)
 
-- แก้ค่าในช่องแล้ว **ไม่กดบันทึก** แผงจะหยุดรีเฟรชจนกว่าจะกดบันทึกปุ่มใดก็ได้ (`fresh(true)` ล้าง `dirty`)
+- อีเว้นต์ที่ตัวเลือกหนึ่งประเมินได้ อีกตัว blind: ขึ้น `★ แนะนำ` ให้ตัวที่ประเมินได้ แต่ **ไม่กด** เพราะประตูต้องการ `scored.length === rows.length` — นายท่านสั่งว่ากดเองได้ (2026-11-18)
+- คะแนนเท่ากันหมด: ไม่กด
+- `act` ไม่มีน้ำหนักบวก เพราะรูปขึ้นกับแต่ละอีเว้นต์ ไม่มีตัวประเมินกลางให้ดูเครื่องหมาย
 
-## รอตรวจในเกม (build `mwlnu1rf`)
+## Finding ที่ยังไม่แก้ (คิวใน `docs/superpowers/notes/2026-11-18-audit-v342.md`)
 
-1. เปิดแผง เล่นในเกม 1 เดือน: เงิน/ค่าพลังในแผงต้องขยับตามเกมเองภายใน ~2 วินาที
-2. พิมพ์ตัวเลขในช่องจำนวนในกระเป๋า (และช่องเงิน) แล้วคลิกออกไปที่เกม รอ 3-4 วินาที: ค่าต้องไม่ถูกล้าง; กด "ตั้ง" แล้วแผงต้องกลับมารีเฟรชตามเกม
-2b. คลิกช่องค้นหาไอเทมค้างไว้ แล้วเล่นในเกม 1 เดือน: เงินในแผงยังต้องขยับตามเกม
-3. แท็บกระเป๋า: ชื่อในตัวกรอง "ระดับความหายาก" ต้องตรงกับป้ายในรายการไอเทม
-4. แท็บช่วยเลือก: การ์ดอีเว้นต์ปกติยังขึ้นคะแนนและกดอัตโนมัติได้; ไม่มีอาการกระตุกตอนเปิดการ์ด
-5. แผงตรวจระบบ: `✔ sim`, `✔` ตารางครบ 4, `✔ BUILD mwlnu1rf`
-
-นายท่านต้องอัปเดตสคริปต์ใน Tampermonkey (หรือรอ auto-update) แล้วรีโหลดหน้าเกมเอง
-
-## Finding ที่ยังไม่แก้ (คิวใน audit note)
-
-- C3, C4, C7-C14 (โค้ด) — D1 แก้แล้วในรอบนี้ (เลขบรรทัด CLAUDE.md §2), D2 แก้แล้ว (ระบุว่าเป็น snapshot เก่า)
-- S1 `@updateURL` ชี้ `main`: ใคร push `main` ได้ก็ส่งโค้ดถึงผู้ใช้ทุกคน — ruleset `protect-main` id `27517988` กันได้แค่ force-push/ลบ
-- T2 ตรรกะให้คะแนนช่วยเลือก (`WEIGHTS`, `fxScore`, `outScore`) ยังอยู่นอก `LOC` จึงไม่มีเทส — เป็นชิ้นถัดไปถ้าจะให้คะแนน `act`
-- T3/T5 ไม่มีเทสกันคีย์ sim สามที่ (C9) และกัน `STATE_OPTIONAL` (C7) หลุดจากกัน
+- C3, C4, C7-C14, S1 (`@updateURL` ชี้ `main`), T3/T5 (ไม่มีเทสกันคีย์ sim สามที่ และ `STATE_OPTIONAL`)
+- T2 ปิดแล้ว
 
 ## หมายเหตุเครื่องมือ
 
-- เทส: `WOX_BUNDLE="C:/Users/PC/Desktop/Wox UI/way-of-xian.wox-game.workers.dev/bundle/mwlnu1rf" node --test "tests/**/*.test.mjs"` — ถ้าไม่ตั้ง จะ skip 5 ตัว และตอนนี้ `release.mjs` จะไม่ยอมปล่อย
-- branch เก่า `audit/2026-11-18` (merged ครบแล้ว) นายท่านสั่งให้ลบ **หลัง** v3.4.3 ตรวจผ่าน — ยังไม่ได้ลบ
-
-## Files and places
-
-- `…\wox-editor.user.js`: v3.4.3, 1171 บรรทัด
-- `…\tools\test-summary.mjs`: `skippedCount` (คืน `-1` เมื่อไม่พบบรรทัดสรุป)
-- `…\tests\`: 67 เทส
-- `…\docs\superpowers\notes\2026-11-18-audit-v342.md`: ผล audit เต็ม
-- `…\bundle\mwlnu1rf\`: build ปัจจุบัน (gitignore)
+- `node --test` พิมพ์สรุปที่ stdout; `release.mjs` อ่าน `# skipped` ผ่าน `tools/test-summary.mjs` แล้วไม่ปล่อยถ้าไม่ใช่ 0
+- bump + release ทำบน `main` เท่านั้น (`protect-main` กัน force-push จึงอเมนด์ commit ที่ปล่อยแล้วไม่ได้)
+- commit message ของ release ส่งผ่านอาร์กิวเมนต์ได้หลายบรรทัด ใช้ใส่ `Co-Authored-By`
