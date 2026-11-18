@@ -145,6 +145,13 @@
     // ช่องที่ fresh() เขียนค่าจากเกมลงไปอยู่ที่ fieldKey — isStateField ถูกถอดใน v3.4.7 เพราะไม่มีใครเรียกแล้ว (R4)
     // คีย์จำผลสแกนของการ์ด (pure): เปลี่ยนเมื่อการ์ด/การตั้งค่าเปลี่ยน หรือเมื่อ sim เพิ่งมาถึง
     const aiKey = (sig, simOn) => (simOn ? '1' : '0') + '|' + String(sig ?? '');
+    // ต้องสแกนการ์ดใหม่หรือไม่ (pure): คีย์เดิมไม่พอ เพราะเกมวาดการ์ดซ้ำด้วย id เดิมได้ (ล้าง #choice-options แล้วสร้างปุ่มใหม่)
+    // id จึงไม่เปลี่ยน แต่ตัวปุ่มเปลี่ยน ป้ายที่จำไว้จึงชี้ปุ่มที่หลุด DOM และกดอัตโนมัติไม่ทำงาน (A1)
+    const aiNeedsScan = (key, prevKey, btns, prevBtns) => {
+      if (key !== prevKey) return true;
+      const a = Array.isArray(btns) ? btns : [], b = Array.isArray(prevBtns) ? prevBtns : [];
+      return a.length !== b.length || a.some((x, i) => x !== b[i]);
+    };
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
     // ต้องตรงกับ URL ที่เกมใช้ทุกตัวอักษรเพื่อให้ได้ module instance เดิม
     const chunkUrl = (p, origin) => new URL(p, origin).href;
@@ -307,7 +314,7 @@
       if (!Array.isArray(scores) || scores.length < 2) return false;
       return scores.every((s) => s === scores[0]);
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, fieldKey, aiKey, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, fieldKey, aiKey, aiNeedsScan, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -1111,11 +1118,11 @@
     const saveAi = () => { const c = aiCfg(); store.set('ai.preset', c.preset); store.set('ai.mark', c.mark ? '1' : '0'); store.set('ai.auto', c.auto ? '1' : '0'); store.set('ai.delay', String(c.delay)); aiScan(true); };
     for (const id of ['ai_preset', 'ai_mark', 'ai_auto', 'ai_delay']) $(id).addEventListener('change', () => { saveAi(); aiKeyPrev = ''; aiScan(); });
 
-    let lastClicked = null, aiTimer = 0, aiPend = null;
+    let lastClicked = null, aiTimer = 0, aiPend = null, aiBest = null;
     // สแกนโดยไม่แตะ DOM ของเกม: ผลไปแสดงในแท็บนี้ ไม่แทรกป้ายเข้าไปในปุ่มของเกม
     // (เดิมแทรกป้ายแล้ว observer ทั้งหน้าสแกนซ้ำทุกเฟรม ทำให้เกมกระตุกและคลิกหาย)
     const aiOut = $('ai_out');
-    let aiKeyPrev = '', aiBadges = [];
+    let aiKeyPrev = '', aiBadges = [], aiBtns = [];
     // ป้ายแนะนำวางทับข้างปุ่มบนการ์ด: อยู่ใน shadow root ของเราเอง จึงไม่แตะ DOM ของเกม และ observer ไม่เห็น
     // pointer-events: none ทำให้คลิกปุ่มของเกมได้ตามปกติ
     function placeBadges() {
@@ -1148,18 +1155,26 @@
       const btns = t?.pending?.kind === 'major' ? [...document.querySelectorAll('#choice-options button[id^="choice-"]')] : [];
       const sig = btns.length ? [t.pending.id, cfg.preset, cfg.mark, cfg.auto, ...btns.map((b) => b.id)].join('|') : '';
       const key = LOC.aiKey(sig, !!SIM);
-      if (key === aiKeyPrev) return; // การ์ด การตั้งค่า และสถานะ sim ไม่เปลี่ยน ไม่ต้องคำนวณใหม่
-      aiKeyPrev = key;
+      // การ์ด การตั้งค่า สถานะ sim และตัวปุ่มยังชุดเดิม = ไม่ต้องคำนวณใหม่
+      if (!LOC.aiNeedsScan(key, aiKeyPrev, btns, aiBtns)) return;
+      aiKeyPrev = key; aiBtns = btns;
       aiBadges = [];
-      if (!sig) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; return; }
+      if (!sig) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; aiBest = null; return; }
       // ยังไม่พร้อม (sim ยังโหลดไม่เสร็จ / ปิดทั้งป้ายและกดอัตโนมัติ) ไม่ต้องคำนวณ — คีย์ผูกกับ !!SIM แล้ว
       // รอบที่ sim มาถึงจึงเป็นคีย์ใหม่และสแกนซ้ำเอง
-      if (!SIM?.majorEvent || (!cfg.mark && !cfg.auto)) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; return; }
-      const ev = SIM.majorEvent(t.pending.id);
+      if (!SIM?.majorEvent || (!cfg.mark && !cfg.auto)) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; aiBest = null; return; }
+      // sim พังตอนอ่านการ์ดต้องบอกในแผง ไม่ใช่หายเงียบ: ผู้เรียก aiScan กลืน throw ทั้งคู่ (A2)
+      let ev, rawOpts;
+      try { ev = SIM.majorEvent(t.pending.id); rawOpts = ev ? ev.options ?? [] : []; }
+      catch (e) {
+        aiBadges = []; clearTimeout(aiTimer); aiPend = null; aiBest = null;
+        aiOut.textContent = 'sim อ่านการ์ดไม่ได้ — ' + (e?.message || String(e));
+        return;
+      }
       // sim รู้จัก sim แต่ไม่รู้จักอีเว้นต์นี้: จำคีย์ไว้ ไม่สแกนซ้ำจนการ์ดเปลี่ยน (C2)
       if (!ev) { aiOut.textContent = ''; return; }
       const W = WEIGHTS[cfg.preset] ?? WEIGHTS.balanced;
-      let opts = ev.options ?? [];
+      let opts = rawOpts;
       try { const mt = SIM.majorTexts?.(t); if (mt?.options?.length) opts = mt.options; } catch { /* ใช้ตัวเลือกดิบ */ }
       const rows = [];
       for (const b of btns) {
@@ -1190,13 +1205,14 @@
       // ตัวจับเวลากดอัตโนมัติ: รอบนี้ควรกดไหม (auto เปิด + มีตัวชนะ + ทุกตัวประเมินได้ + การ์ดนี้ยังไม่เคยกด)
       // ถ้าไม่ควรกด ต้องล้างตัวจับเวลาเดิมด้วย ไม่งั้นตัวที่ตั้งไว้รอบก่อนจะยิงแล้วกดทั้งที่คะแนนกลายเป็นเท่ากันแล้ว (N2)
       const canClick = cfg.auto && !!(best && known.length === rows.length && scored.length === rows.length) && lastClicked !== t.pending;
-      if (!canClick) { clearTimeout(aiTimer); aiPend = null; }
-      else if (aiPend !== t.pending) {
-        const pend = t.pending; aiPend = pend; clearTimeout(aiTimer);
+      if (!canClick) { clearTimeout(aiTimer); aiPend = null; aiBest = null; }
+      // เกมวาดการ์ดใหม่ระหว่างหน่วงได้: ตั้งเวลากับปุ่มของรอบนี้เสมอ ไม่งั้นตัวจับเวลาเดิมยิงแล้วเจอปุ่มที่หลุด DOM (A1)
+      else if (aiPend !== t.pending || aiBest !== best.b) {
+        const pend = t.pending, btn = best.b; aiPend = pend; aiBest = btn; clearTimeout(aiTimer);
         aiTimer = setTimeout(() => {
-          aiPend = null;
-          if (t.pending !== pend || !best.b.isConnected) return;
-          lastClicked = pend; best.b.click();
+          aiPend = null; aiBest = null;
+          if (t.pending !== pend || !btn.isConnected) return;
+          lastClicked = pend; btn.click();
         }, cfg.delay);
       }
     }
