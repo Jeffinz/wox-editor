@@ -135,6 +135,9 @@
     };
     // ค่าที่จะเขียนลงช่องที่ว่างแล้วควรคงค่าเดิม (pure): ช่องว่าง/ไม่ใช่ตัวเลข → ใช้ค่าเดิม (ไม่ใช่ตัวเลข → 0)
     const numOrKeep = (x, prev) => numOr(x) ?? (Number.isFinite(prev) ? prev : 0);
+    // ค่าที่จะเขียนลง state จากช่องเลือก (pure, ห้าม throw): ช่องที่ผู้ใช้ยังไม่แตะไม่มีสิทธิ์เขียนทับค่าเดิมของเกม
+    // เพราะเบราว์เซอร์เมินค่าที่ไม่มีในรายการ (ตารางสั้นลง/ค่าเกินช่วง) แล้วโชว์ตัวเลือกแรกแทน (A3)
+    const pickOrKeep = (shown, current, touched) => (touched ? shown : current);
     // คีย์ของช่องที่ fresh() เขียนค่าลงไป (pure, ห้าม throw): ช่องกระเป๋าใช้ "b:<ไอเทม>", ช่องอื่นใช้ id
     // ใช้เป็นกุญแจของชุดช่องที่ผู้ใช้แก้แล้วยังไม่บันทึก (dirty) ช่องที่ไม่ใช่ของ state คืน null
     const fieldKey = (f) => {
@@ -314,7 +317,7 @@
       if (!Array.isArray(scores) || scores.length < 2) return false;
       return scores.every((s) => s === scores[0]);
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, fieldKey, aiKey, aiNeedsScan, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, pickOrKeep, fieldKey, aiKey, aiNeedsScan, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -933,7 +936,7 @@
     // ---------- แสดงค่าปัจจุบัน ----------
     const name = (id) => ITEMS?.[id]?.th ?? id;
     // escape id สำหรับ attribute selector (ใช้กับช่องกระเป๋าที่ไม่มี id มีแต่ data-b)
-    const CSS_ESC = (s) => (window.CSS?.escape ? window.CSS.escape(s) :String(s).replace(/"/g, '\\"'));
+    const CSS_ESC = (s) => (window.CSS?.escape ? window.CSS.escape(s) : String(s).replace(/"/g, '\\"'));
     let lastBagSig = '';
     // ช่องที่ผู้ใช้แก้แล้วยังไม่บันทึก: fresh() ข้ามเฉพาะช่องในชุดนี้ ช่องอื่นรีเฟรชตามปกติ
     // (เดิมเป็น boolean ตัวเดียว: พิมพ์ค้างช่องเดียวแล้วคลิกออกไปโดยไม่บันทึก = ทั้งแผงหยุดรีเฟรชตลอด session — N1)
@@ -1015,8 +1018,11 @@
         if (!t.martial) return toast('ตัวละครนี้ไม่ได้อยู่สายยุทธ์', true);
         // ยังอ่านตาราง MARTIAL_RANKS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ rank 0 ทับค่าเดิม
         if (!$('h_mrank').options.length) return toast('ยังอ่านตารางระดับสายยุทธ์ไม่ได้ รอสักครู่แล้วลองใหม่', true);
-        const rank = LOC.numOr($('h_mrank').value);
-        if (rank === null) return toast('เลือกระดับสายยุทธ์ก่อน', true);
+        const shownRank = LOC.numOr($('h_mrank').value);
+        if (shownRank === null) return toast('เลือกระดับสายยุทธ์ก่อน', true);
+        // ช่องที่ยังไม่ถูกแตะ: ค่าที่แสดงอาจเป็นตัวเลือกแรกเพราะค่าจริงไม่อยู่ในตาราง → คงค่าเดิมไว้ (A3)
+        const rank = LOC.pickOrKeep(shownRank, t.martial.rank, dirty.has('h_mrank'));
+        if (rank !== shownRank) msg = 'ระดับที่แสดงไม่อยู่ในตาราง คงค่าเดิมไว้';
         t.martial.rank = rank;
         t.martial.stage = LOC.numOrKeep($('h_mstage').value, t.martial.stage);
         t.martial.force = LOC.numOrKeep($('h_mforce').value, t.martial.force);
@@ -1029,8 +1035,11 @@
       } else if (b.id === 'hrl') {
         // ยังอ่านตาราง REALMS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ realm 0 ทับค่าเดิม
         if (!$('h_realm').options.length) return toast('ยังอ่านตารางขั้นพลังไม่ได้ รอสักครู่แล้วลองใหม่', true);
-        const realm = LOC.numOr($('h_realm').value);
-        if (realm === null) return toast('เลือกขั้นพลังก่อน', true);
+        const shownRealm = LOC.numOr($('h_realm').value);
+        if (shownRealm === null) return toast('เลือกขั้นพลังก่อน', true);
+        // ช่องที่ยังไม่ถูกแตะ: ค่าที่แสดงอาจเป็นตัวเลือกแรกเพราะค่าจริงไม่อยู่ในตาราง → คงค่าเดิมไว้ (A3)
+        const realm = LOC.pickOrKeep(shownRealm, t.realm, dirty.has('h_realm'));
+        if (realm !== shownRealm) msg = 'ขั้นพลังที่แสดงไม่อยู่ในตาราง คงค่าเดิมไว้';
         t.realm = realm;
         t.layer = LOC.numOrKeep($('h_layer').value, t.layer);
         t.qi = LOC.numOrKeep($('h_qi').value, t.qi);
@@ -1058,6 +1067,8 @@
         if (!ITEMS?.[id]) return toast('เลือกไอเทมจากรายการก่อน', true);
         if (n === null || n <= 0) return toast('ใส่จำนวนที่มากกว่า 0', true);
         (t.bag ??= {})[id] = (t.bag[id] ?? 0) + n;
+        // ปลดค่าที่พิมพ์ค้างของไอเทมนี้ ไม่งั้นแถวใหม่จะโชว์เลขเก่าที่พิมพ์ไว้ ทั้งที่เพิ่มไปแล้ว (A4)
+        saved.add('b:' + id);
         msg = `เพิ่ม ${name(id)} ×${n} แล้ว`;
       } else if (b.id === 'hevb') {
         if (!SIM) return toast(LOC.EV_UNSUPPORTED + (simError ? ' — ' + simError : ''), true);
@@ -1115,7 +1126,7 @@
     $('ai_mark').checked = store.get('ai.mark') !== '0';
     $('ai_auto').checked = store.get('ai.auto') === '1';
     $('ai_delay').value = store.get('ai.delay') || '1200';
-    const saveAi = () => { const c = aiCfg(); store.set('ai.preset', c.preset); store.set('ai.mark', c.mark ? '1' : '0'); store.set('ai.auto', c.auto ? '1' : '0'); store.set('ai.delay', String(c.delay)); aiScan(true); };
+    const saveAi = () => { const c = aiCfg(); store.set('ai.preset', c.preset); store.set('ai.mark', c.mark ? '1' : '0'); store.set('ai.auto', c.auto ? '1' : '0'); store.set('ai.delay', String(c.delay)); aiScan(); };
     for (const id of ['ai_preset', 'ai_mark', 'ai_auto', 'ai_delay']) $(id).addEventListener('change', () => { saveAi(); aiKeyPrev = ''; aiScan(); });
 
     let lastClicked = null, aiTimer = 0, aiPend = null, aiBest = null;
@@ -1172,7 +1183,7 @@
         return;
       }
       // sim รู้จัก sim แต่ไม่รู้จักอีเว้นต์นี้: จำคีย์ไว้ ไม่สแกนซ้ำจนการ์ดเปลี่ยน (C2)
-      if (!ev) { aiOut.textContent = ''; return; }
+      if (!ev) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; aiBest = null; return; }
       const W = WEIGHTS[cfg.preset] ?? WEIGHTS.balanced;
       let opts = rawOpts;
       try { const mt = SIM.majorTexts?.(t); if (mt?.options?.length) opts = mt.options; } catch { /* ใช้ตัวเลือกดิบ */ }

@@ -34,3 +34,14 @@ test('numOrKeep keeps the old value for empty or bad input', () => {
   assert.equal(LOC.numOrKeep('12', 7), 12);
   assert.equal(LOC.numOrKeep('', undefined), 0);
 });
+
+test('pickOrKeep: ช่องเลือกที่ผู้ใช้ไม่ได้แตะและแสดงค่าคนละตัวกับ state ต้องคงค่าเดิม (A3)', () => {
+  // เบราว์เซอร์เมินค่าที่ไม่มีในรายการแล้วโชว์ตัวเลือกแรก: ค่าที่อ่านได้จึงไม่ใช่ค่าของ state
+  assert.equal(LOC.pickOrKeep(0, 4, false), 4);
+  assert.equal(LOC.pickOrKeep(0, 4, true), 0); // ผู้ใช้เลือกเอง = เชื่อผู้ใช้
+  assert.equal(LOC.pickOrKeep(4, 4, false), 4); // ตรงกัน = เขียนได้ตามปกติ
+  assert.equal(LOC.pickOrKeep('4', 4, false), 4); // ค่าจาก <select> เป็นสตริง
+  assert.equal(LOC.pickOrKeep(null, 4, false), 4);
+  assert.equal(LOC.pickOrKeep(undefined, 0, false), 0);
+  assert.equal(LOC.pickOrKeep(null, undefined, false), undefined);
+});
