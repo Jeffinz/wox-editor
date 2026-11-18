@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.4.4
+// @version      3.4.5
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -279,11 +279,16 @@
       const len = (x) => (x && typeof x === 'object' ? Object.keys(x).length : 0);
       return len(o.fx) > 0 || len(o.act) > 0;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, isStateField, aiKey, fxScore, outScore, hasResult, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    // คะแนนเท่ากันหมด (ตั้งแต่ 2 ตัวขึ้นไป) = ไม่มีเหตุผลให้เลือกตัวไหน ห้ามกดอัตโนมัติแบบเดา
+    const allTie = (scores) => {
+      if (!Array.isArray(scores) || scores.length < 2) return false;
+      return scores.every((s) => s === scores[0]);
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, isStateField, aiKey, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.4.4'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.4.5'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
@@ -1099,8 +1104,10 @@
       const known = rows.filter((r) => r.sc !== null);
       if (!known.length) { aiOut.textContent = ''; return; }
       const scored = known.filter((r) => !r.blind);
-      const best = scored.length ? scored.reduce((a, r) => (r.sc > a.sc ? r : a)) : null;
-      aiOut.textContent = cfg.mark ? known.map((r) => (r === best ? '★ แนะนำ · ' : '') + r.b.textContent.trim().slice(0, 50) + ': ' + (r.blind ? 'ผลไม่ใช่ตัวเลข ประเมินไม่ได้' : 'คะแนน ' + r.sc.toFixed(1)) + (r.p < 1 ? ' · สำเร็จ ~' + Math.round(r.p * 100) + '%' : '')).join('\n') : '';
+      // คะแนนเท่ากันหมด = ไม่มีตัวไหนดีกว่า จึงไม่กดอัตโนมัติ และไม่ติดดาวให้ตัวแรก
+      const tie = LOC.allTie(scored.map((r) => r.sc));
+      const best = scored.length && !tie ? scored.reduce((a, r) => (r.sc > a.sc ? r : a)) : null;
+      aiOut.textContent = cfg.mark ? (tie ? 'คะแนนเท่ากันทั้งหมด — ไม่กดอัตโนมัติ\n' : '') + known.map((r) => (r === best ? '★ แนะนำ · ' : '') + r.b.textContent.trim().slice(0, 50) + ': ' + (r.blind ? 'ผลไม่ใช่ตัวเลข ประเมินไม่ได้' : 'คะแนน ' + r.sc.toFixed(1)) + (r.p < 1 ? ' · สำเร็จ ~' + Math.round(r.p * 100) + '%' : '')).join('\n') : '';
       if (cfg.mark) aiBadges = known.map((r) => ({ b: r.b, best: r === best, text: (r === best ? '★ แนะนำ' : r.blind ? 'ประเมินไม่ได้' : r.sc.toFixed(1)) + (r.p < 1 ? ' · ~' + Math.round(r.p * 100) + '%' : '') }));
       if (!cfg.auto) { clearTimeout(aiTimer); aiPend = null; }
       else if (best && known.length === rows.length && scored.length === rows.length && lastClicked !== t.pending && aiPend !== t.pending) {

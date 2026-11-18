@@ -37,3 +37,12 @@ test('hasResult: fx หรือ act อย่างใดอย่างหน�
   assert.equal(LOC.hasResult(null), false);
   assert.equal(LOC.hasResult(undefined), false);
 });
+
+test('allTie: คะแนนเท่ากันหมดแปลว่าไม่มีเหตุผลให้เลือกตัวไหน', () => {
+  assert.equal(LOC.allTie([0, 0]), true);
+  assert.equal(LOC.allTie([2.5, 2.5, 2.5]), true);
+  assert.equal(LOC.allTie([3, 0]), false);
+  assert.equal(LOC.allTie([0, 0, 1]), false);
+  assert.equal(LOC.allTie([]), false);
+  assert.equal(LOC.allTie([7]), false); // ตัวเลือกเดียว = ไม่ต้องเดา
+});
