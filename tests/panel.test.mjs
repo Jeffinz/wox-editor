@@ -17,3 +17,8 @@ test('isStalePanel matches old editor panels only', () => {
   assert.equal(LOC.isStalePanel(P({ hasShadow: false })), false);
   assert.equal(LOC.isStalePanel(null), false);
 });
+
+test('isStateField: เฉพาะช่องที่ fresh() เขียนค่าจากเกมลงไป', () => {
+  for (const f of [{ id: 'hm' }, { id: 'h_karma' }, { id: 'h_mrank' }, { id: 's_body' }, { b: 'woodSword' }, { id: '', b: 'x' }]) assert.equal(LOC.isStateField(f), true, JSON.stringify(f));
+  for (const f of [{ id: 'hq' }, { id: 'hqr' }, { id: 'hn' }, { id: 'hmb' }, { id: 'hmr' }, { id: 'ai_mark' }, { id: '' }, {}, null, undefined]) assert.equal(LOC.isStateField(f), false, JSON.stringify(f));
+});

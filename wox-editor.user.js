@@ -129,6 +129,9 @@
     };
     // ค่าที่จะเขียนลงช่องที่ว่างแล้วควรคงค่าเดิม (pure): ช่องว่าง/ไม่ใช่ตัวเลข → ใช้ค่าเดิม (ไม่ใช่ตัวเลข → 0)
     const numOrKeep = (x, prev) => numOr(x) ?? (Number.isFinite(prev) ? prev : 0);
+    // ช่องที่ fresh() เขียนค่าจากเกมลงไป (pure, ห้าม throw): ผู้ใช้พิมพ์ในช่องพวกนี้แล้วยังไม่บันทึก รอบรีเฟรชต้องไม่ทับ
+    // ช่องค้นหา/กรอง/ช่วยเลือกไม่นับ เพราะ fresh() ไม่แตะ
+    const isStateField = (f) => f?.b != null || f?.id === 'hm' || /^(h_|s_)/.test(String(f?.id ?? ''));
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
     // ต้องตรงกับ URL ที่เกมใช้ทุกตัวอักษรเพื่อให้ได้ module instance เดิม
     const chunkUrl = (p, origin) => new URL(p, origin).href;
@@ -238,7 +241,7 @@
       if (info?.state === 'error') return '✖ sim: ' + (info.reason || 'ไม่ทราบสาเหตุ');
       return '– sim: ยังรอ';
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, isStateField, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -829,21 +832,29 @@
 
     // ---------- แสดงค่าปัจจุบัน ----------
     const name = (id) => ITEMS?.[id]?.th ?? id;
+    let dirty = false, lastBagSig = '';
+    // ผู้ใช้แก้ช่องที่ fresh() เขียนทับ: หยุดรีเฟรชเป็นรอบจนกว่าจะกดบันทึก (fresh(true) ล้าง)
+    root.addEventListener('input', (e) => { if (LOC.isStateField({ id: e.target.id, b: e.target.dataset?.b })) dirty = true; });
     const fresh = (force) => {
       if (!t) return false;
-      // ไม่เขียนทับช่องที่ผู้ใช้กำลังแก้: ครอบทั้งช่องกรอก ช่องเลือก และกล่องข้อความ
-      if (force || !['INPUT', 'SELECT', 'TEXTAREA'].includes(root.activeElement?.tagName)) {
-        $('h_mst').textContent = t.martial ? '' : 'ตัวละครนี้ไม่ได้อยู่สายยุทธ์ จึงแก้ส่วนนี้ไม่ได้';
-        if (t.martial) { $('h_mrank').value = t.martial.rank; $('h_mstage').value = t.martial.stage; $('h_mforce').value = Math.round(t.martial.force ?? 0); }
-        $('h_karma').value = t.karma ?? 0; $('h_fame').value = t.fame ?? 0;
-        $('h_realm').value = t.realm ?? 0; $('h_layer').value = t.layer ?? 0; $('h_qi').value = Math.round(t.qi ?? 0);
-        $('hm').value = t.money;
-        for (const [k] of STATS) $('s_' + k).value = t.stats?.[k] ?? '';
-      }
+      // ค่าที่ผู้ใช้พิมพ์ค้างไว้ยังไม่บันทึก: ไม่เขียนทับทั้งช่องกรอกและกระเป๋า
+      if (!force && dirty) return true;
+      dirty = false;
+      $('h_mst').textContent = t.martial ? '' : 'ตัวละครนี้ไม่ได้อยู่สายยุทธ์ จึงแก้ส่วนนี้ไม่ได้';
+      if (t.martial) { $('h_mrank').value = t.martial.rank; $('h_mstage').value = t.martial.stage; $('h_mforce').value = Math.round(t.martial.force ?? 0); }
+      $('h_karma').value = t.karma ?? 0; $('h_fame').value = t.fame ?? 0;
+      $('h_realm').value = t.realm ?? 0; $('h_layer').value = t.layer ?? 0; $('h_qi').value = Math.round(t.qi ?? 0);
+      $('hm').value = t.money;
+      for (const [k] of STATS) $('s_' + k).value = t.stats?.[k] ?? '';
+      // สร้างแถวกระเป๋าใหม่เฉพาะเมื่อกระเป๋าเปลี่ยน: สร้างใหม่ทุกรอบจะแทนปุ่ม "ตั้ง/ลบ" ระหว่างผู้ใช้กดจนคลิกหาย
       const bag = t.bag ?? {};
-      $('hbag').innerHTML = Object.keys(bag).length
-        ? Object.entries(bag).map(([id, n]) => `<div class="bagrow"><span class="nm">${ITEMS?.[id] ? rarDot(itemRar(ITEMS[id])[1]) + ' ' : ''}${esc(name(id))}${ITEMS?.[id] ? ` <small class="rtxt">· ${esc(itemRar(ITEMS[id])[0])}</small>` : ''}</span><input data-b="${esc(id)}" type="number" value="${n}" aria-label="จำนวน ${esc(name(id))}"><button class="b" data-bset="${esc(id)}">ตั้ง</button><button class="b dng" data-bdel="${esc(id)}" aria-label="ลบ ${esc(name(id))}">ลบ</button></div>`).join('')
-        : '<div class="empty">กระเป๋าว่าง เพิ่มไอเทมได้ด้านล่าง</div>';
+      const bagSig = JSON.stringify(bag);
+      if (force || bagSig !== lastBagSig) {
+        lastBagSig = bagSig;
+        $('hbag').innerHTML = Object.keys(bag).length
+          ? Object.entries(bag).map(([id, n]) => `<div class="bagrow"><span class="nm">${ITEMS?.[id] ? rarDot(itemRar(ITEMS[id])[1]) + ' ' : ''}${esc(name(id))}${ITEMS?.[id] ? ` <small class="rtxt">· ${esc(itemRar(ITEMS[id])[0])}</small>` : ''}</span><input data-b="${esc(id)}" type="number" value="${esc(n)}" aria-label="จำนวน ${esc(name(id))}"><button class="b" data-bset="${esc(id)}">ตั้ง</button><button class="b dng" data-bdel="${esc(id)}" aria-label="ลบ ${esc(name(id))}">ลบ</button></div>`).join('')
+          : '<div class="empty">กระเป๋าว่าง เพิ่มไอเทมได้ด้านล่าง</div>';
+      }
       return true;
     };
     const setStat = (k, v) => {
@@ -1137,6 +1148,6 @@
     };
     setTimeout(() => { runHealth(); checkUpdate(); }, 3000);
 
-    const wait = setInterval(() => { if (fresh()) clearInterval(wait); }, 1000);
+    setInterval(() => fresh(), 2000);
   });
 })();
