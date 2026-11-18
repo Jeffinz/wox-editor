@@ -1,88 +1,100 @@
-# Handoff: งานถัดไปคือทำอีเว้นต์/ช่วยเลือกแบบ (ก) ให้สคริปต์
+# Handoff: ลงมือแก้ finding ของ audit ตามแผน แล้วปล่อย v3.3.2
 
-Written: 2026-11-18 01:23 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
+Written: 2026-11-18 09:43 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
 
-อ่าน `CLAUDE.md` ใน working directory ก่อน ไฟล์นั้นมีกติกาโปรเจกต์ (ตอบภาษาไทย, `node --check`, bump `@version` + `VERSION`, ปล่อยด้วย `tools/release.mjs`, เรียกผู้ใช้ว่า "นายท่านชาโดว์")
+อ่าน `CLAUDE.md` ก่อน กติกาของโปรเจ็คอยู่ในนั้น: ตอบภาษาไทย, รัน `node --check`, bump `@version` และ `VERSION` พร้อมกัน, ปล่อยด้วย `tools/release.mjs`, เรียกผู้ใช้ว่า "นายท่านชาโดว์" และ**ห้ามแยก subagent** (§7)
 
 ## Goal
 
-สคริปต์ `wox-editor.user.js` ถูกย้ายไปใช้เกมแบบ bundle แล้วและปล่อย v3.3.1 เรียบร้อย งานที่เหลือคือนายท่านเลือกทาง **(ก) แบบจำกัดขอบเขต** สำหรับอีเว้นต์และช่วยเลือก:
+นายท่านชาโดว์ต้องการให้แก้ทุก finding ของ audit 2026-11-18 ที่ไม่ชนกับงาน (ก) งาน (ก) คือแท็บอีเว้นต์/ช่วยเลือกแบบใหม่ ทุกการแก้ต้องมีเทส แล้วปล่อย `wox-editor.user.js` เป็น **v3.3.2 ครั้งเดียว**
 
-- แท็บอีเว้นต์: แสดงการ์ดอีเว้นต์ที่เปิดอยู่ + บันทึกชีวิตนี้ (`t.log`)
-- แท็บช่วยเลือก: เปลี่ยนเป็นใบข้อมูล (ข้อความตัวเลือก, stat ที่ทดสอบ, คำบอกช่วงโอกาสจาก DOM, ความหายาก) + ปุ่ม "ให้เกมเลือกเอง" ที่ผู้ใช้กดเอง ไม่มี auto-click และ **ไม่ให้คะแนน** เพราะ `fx`/`act` ไม่มีใน bundle
-- ลบโค้ดตาย `SIM`/`MJ` ที่อ้างถึงอย่างเดียวไม่มีใคร assign
-
-เสร็จเมื่อ: งานนี้ออกแบบ+เขียนแผน+อนุมัติ ลงโค้ด, เทสผ่าน, นายท่านทดสอบในเกมจริง, แล้วปล่อยเวอร์ชัน
+งานถือว่าเสร็จเมื่อครบทุกข้อนี้:
+- Task 0-9 ในแผนติ๊กครบ
+- เทสได้ fail 0 / skip 0
+- ruleset ของ `main` ใช้งานอยู่
+- raw `main` แสดง `@version 3.3.2`
+- `HANDOFF.md` ใหม่มีรายการให้นายท่านตรวจในเกม
 
 ## Where things stand
 
-Task 1-5 ของแผน `docs/superpowers/plans/2026-11-17-bundle-port.md` เสร็จครบ, final review ผ่านหลัง fix wave, นายท่านทดสอบในเกมจริงผ่าน, ปล่อย `3.3.1` ขึ้น `main` แล้ว, worktree กับ branch งานถูกลบทั้งในเครื่องและบน origin งาน (ก) ยังไม่เริ่ม: ไม่มี design doc ไม่มีแผน ไม่มีโค้ด
+ออกแบบเสร็จและนายท่านอนุมัติแล้ว แผนเขียนเสร็จแล้ว แต่**ยังไม่มีโค้ดไหนถูกแก้** ยังไม่มี worktree และยังไม่ได้ตั้ง ruleset งานทั้งหมดอยู่ที่ branch `audit/2026-11-18` ซึ่งยังไม่ได้ push
 
 ## Verified facts
 
-- **เกมไม่เสิร์ฟ `/src/*.js` แล้ว** ยกเว้น `/src/build.js` ที่ยังได้ 200 เป็น `export const BUILD = "mwkobenp";` (ตรวจด้วย `curl` 2026-11-17)
-- **สคริปต์ v3.3.1 บน `main` ปล่อยแล้ว** commit `9f94ca5`; `curl -s https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js | head -3` ให้ `@version 3.3.1`
-- **เนื้อหา 3.3.1 = 3.3.0 ที่ทดสอบ** ต่างแค่เลขเวอร์ชัน เพราะ `tools/release.mjs` (บรรทัด 25-28) ไม่ให้ commit เลขเดิมซ้ำ
-- **เทสผ่าน 24, ข้าม 1** `node --check wox-editor.user.js && node --test "tests/**/*.test.mjs"` (รันบน main 2026-11-18, Node v22.23.5) → `pass 24, fail 0, skipped 1`; ข้อที่ข้ามคือเทส `chunkChain` กับ chain จริง ซึ่งข้ามเองเมื่อไม่มี `bundle/` (ถ้าอยากให้รันครบต้อง `node tools/fetch-bundle.mjs` ก่อน)
-- **origin เหลือ `main` เดียว** `git ls-remote --heads origin` → `refs/heads/main` `9f94ca5`; branch `wip/bundle-fetch` ถูกลบทั้ง local และ remote; worktree `C:\Users\PC\Desktop\Wox UI\wox-bundle-fetch` ถูกลบแล้ว (`ls "C:\Users\PC\Desktop\Wox UI"` เหลือโฟลเดอร์เดียว)
-- **สคริปต์โหลด chunk ร่วมได้จริงในเกม** นายท่านยืนยัน 2026-11-18: แผงตรวจระบบ `✔` ครบ 4 ตาราง, dropdown ขั้นพลัง/ขั้นยุทธ์มีค่า, กระเป๋ามีไอเทมพร้อมป้ายระดับ, ไม่มี error ใหม่
-- **ข้อมูลอีเว้นต์/rarity อยู่ใน `app-*.js` เท่านั้น** รายละเอียดและ byte offset อยู่ใน `docs/superpowers/notes/2026-11-17-events-spike.md` (ตรวจด้วย `grep -b` บน `bundle/mwkobenp/b/app-56NJKGMX.js` เมื่อ 2026-11-17/18; ไฟล์ bundle ถูกลบไปพร้อม worktree — ต้องดึงใหม่)
-- **`t.pending` เก็บ id ไม่เก็บข้อความ/โอกาส** `openOptions` (`wr`, app 3,221,219) จบด้วย `.map(o=>o.id)`; `rarity` มีบนบางเส้นทาง (2,134,196 / 2,181,138 / 2,192,959) ไม่มีบน 2,161,404 / 2,163,785 / 1,229,835
-- **การ์ด DOM ให้ข้อมูลที่ต้องการ** `small.odds[data-stat]` (ตัวสร้าง `Uet` app 5,371,173, เรียกที่ 5,385,936 เฉพาะ `d.chance?.stat && e.id!=="campaignTurn"`), `#choice.r-<rarity>` + `.rarity-badge` เฉพาะ rarity ที่ไม่ใช่ common (5,384,498 / 5,384,548), ปุ่ม `.fate-pick` ของเกมเอง (5,387,336) สุ่มแล้วคลิกให้
-- **`t.log` ไม่มี `fx`** entry คือ `{age,month,kind,th,en,anim,…}` (app 1,458,871), UI อ่าน `h.rarity` (5,032,414)
-- **`c-577XDD6D.js` ไม่มี sim แต่มี helper ใกล้เคียง** `function cOe` (116,301, แตะ `e.pending` ราว 116,350), ตารางป้ายระดับ `bre=[["ธรรมดา","common"],…]` (686,449) — ไม่มี weight/gap และไม่อยู่ใน export block ห้ามใช้แทน `RARITY`
-- **`window.wox` มีเฉพาะหลังโหลดด้วย `?promo`** (app 5,400,328) และมีแค่ UI helpers ไม่มี sim/อีเว้นต์; global อื่น (`__estate`, `__sceneCuts`, `__sfxSpy`, `__answerSurvives`) เป็น diagnostics ไม่มีข้อมูลอีเว้นต์
-- **REA ใช้กับ chunk ใหญ่ได้ถ้าเพิ่ม heap** ตั้ง `javascript.max_heap_mb` = 8192 และ `javascript.analysis_timeout_ms` = 900000 ผ่าน `update_analysis_settings`; `app-56NJKGMX.js` วิเคราะห์จบ 1.3M AST nodes, `c-577XDD6D.js` จบ 1.59M nodes; ผลยัง partial เพราะเพดาน `max_semantic_nodes_per_file`/`unknowns` (30000) ไม่ใช่ heap
-- **เพดาน retained representation ของ investigation ~1.05 GB ต่อหนึ่ง investigation** เต็มแล้วต้อง `export_evidence_bundle` แล้ว `reset_investigation` ก่อนวิเคราะห์ไฟล์ใหญ่ตัวถัดไป (error จะบอก `retained representation allowance is exhausted`)
+- **branch `audit/2026-11-18` อยู่ที่ `cfe47e6`** (`git log --oneline -1`) working tree สะอาด (`git status --short` ว่าง)
+- **`main` ในเครื่อง (`16308fb`) นำ `origin/main` (`9f94ca5`) อยู่ 1 commit** ตรวจด้วย `git rev-parse main origin/main` commit ที่นำคือ `16308fb docs: rewrite the handoff for the events work` ซึ่งจะถูก push ไปพร้อมกันตอนรัน `release.mjs` ใน Task 9 ถือว่าปกติ
+- **นายท่านอนุมัติ design doc แล้ว** คือ `docs/superpowers/specs/2026-11-18-audit-fixes-design.md` (commit `640064e`)
+- **แผนอยู่ที่ `docs/superpowers/plans/2026-11-18-audit-fixes.md`** (commit `cfe47e6`) มี Task 0-9
+- **คำตอบของนายท่านที่ล็อกไว้ในแผนแล้ว:**
+  - ทดสอบแบบ A: ย้ายตรรกะเป็นฟังก์ชัน pure ใน `LOC` แล้วเทสใน Node ไม่ใช้ jsdom
+  - F4 แก้เฉพาะข้อความ ไม่ลบโค้ดตาย
+  - S1 ตั้งผ่าน `gh` โดยกฎ**บังคับเจ้าของ repo ด้วย** (`bypass_actors: []`)
+  - S5 รองรับเฉพาะสคริปต์ v3.0 ขึ้นไป (ไม่มี v2.x ค้างใน Tampermonkey)
+- **ตัวระบุแผงเก่ามีครบทุกรุ่น** ทุก commit ที่แก้ `wox-editor.user.js` ตั้งแต่ `1a5da62` (v3.0.0) ถึง `9f94ca5` (v3.3.1) มี `aria-label="WoX Editor"` อยู่ 1 จุด และ `<b>WoX Editor</b>` อยู่ 1 จุด ตรวจด้วย `git show <c>:wox-editor.user.js | grep -c`
+- **บัญชี `gh` มีสิทธิ์ admin บน `Jeffinz/wox-editor`** ตรวจด้วย `gh api repos/Jeffinz/wox-editor --jq .permissions` ได้ `admin: true` repo เป็น public และ default branch คือ `main`
+- **`release.mjs` stage เฉพาะไฟล์เหล่านี้:** `wox-editor.user.js`, `tools/release.mjs`, `tests/`, `.gitignore`, `CLAUDE.md`, `AGENTS.md` ถ้าไม่มีอะไรให้ commit จะ throw ก่อนถึงขั้น push แผนจึงให้ bump version บน `main` หลัง merge
+- **`bundle/mwky5ysx/` มีอยู่แล้ว** (`ls bundle`) โฟลเดอร์นี้ gitignore อยู่ และ worktree ใหม่จะไม่มีโฟลเดอร์นี้ ต้องรัน `node tools/fetch-bundle.mjs` ใน worktree (Task 0)
+- **เทสก่อนแก้ได้ pass 24 / fail 0 / skip 1** (Node v22.23.5) ข้อที่ skip คือ `chunkChain reads the real mwkobenp chain`
+- **BUILD ล่าสุดที่ตรวจคือ `mwky5ysx`** ตรวจเมื่อ 2026-11-18 ด้วย `curl -s https://way-of-xian.wox-game.workers.dev/src/build.js`
 
 ## Guesses, not yet proven
 
-- **`pending.rarity` มีจริงบนการ์ดที่เห็นในเกม** — ตรวจได้จาก bundle ว่าโค้ดมีบางเส้นทางที่ใส่ ถ้าอยากรู้จริงเปิดอีเว้นต์ major แล้วดู `t.pending` ใน console
-- **ปุ่มส่วนใหญ่มี `.odds`** — โค้ดเรียกเฉพาะปุ่มที่มี `chance.stat`; ยังไม่รู้สัดส่วนจริงในเกม ต้องไล่ดูการ์ด 2-3 ครั้ง
-- **`#choice-options` ยังใช้ id/คลาสเดิมหลังเกมอัปเดตครั้งหน้า** — ยังไม่มีใครเจอ build ใหม่ วิธีพิสูจน์คือรัน `node tools/fetch-bundle.mjs` แล้วเทียบ `docs/superpowers/notes/2026-11-17-events-spike.md`
-- **การ import chunk ให้ instance เดียวกับเกม** — ผลทดสอบในเกมชี้ว่าถูก (ตารางขึ้นครบ) แต่ไม่มีใครพิสูจน์เชิงโครงสร้าง
+- **การจับ tier สตริงเข้ากับ index 0-4 ของตัวกรองอาจทำให้ผู้ใช้สับสน** ตัวอย่างคือ `uncommon` แสดงป้าย "ไม่ธรรมดา" แต่ไปอยู่ใต้ตัวกรอง "ขั้นมนุษย์" แผน Task 2 Step 4 ให้ผู้ลงมือตัดสิน ข้อนี้จะรู้แน่ก็ต่อเมื่อนายท่านเปิดแท็บกระเป๋าในเกม
+- **payload ของ ruleset** ที่คาดไว้คือ `target: "branch"`, `enforcement: "active"`, `conditions.ref_name.include: ["refs/heads/main"]`, rules `non_fast_forward` + `deletion`, `bypass_actors: []` ทั้งหมดนี้มาจากความจำ ยังไม่ได้ตรวจกับเอกสาร GitHub ต้องตรวจก่อนรัน (Task 9 Step 3)
+- **ruleset ที่ไม่มี bypass ไม่น่าบล็อก push ปกติจาก `release.mjs`** เพราะไม่มีกฎ review หรือ status check จะรู้แน่ตอนรัน Task 9 Step 8
+- ข้อที่ยังค้างจาก handoff ก่อนและยังไม่มีใครตรวจในเกม build `mwky5ysx`:
+  - ป้ายระดับของไอเทม tier สตริงแสดงถูกหรือไม่
+  - `t.pending` และคลาส `r-*` ยังมีจริงหรือไม่
+  - `renderCore` throw จริงกับไอเทมที่ไม่มี `slot` หรือไม่
 
 ## Ruled out and wrong turns
 
-- อย่า import `app-*.js` หรือ `boot-*.js` แม้ต่อ query string — จะรันเกมชุดที่สอง
-- อย่าถอดรหัส `d/*.bin` นอกเกม หรือใช้ key จาก `c-RCZEDD4B.js`; เนื้ออีเว้นต์ build `mwkobenp` อยู่ใน `app-*.js` ไม่ได้อยู่ใน bin
-- อย่าดึง `app-*.js` ตอนรันมาไล่ regex เอาตาราง — ค่าที่ต้องการเป็น expression ไม่ใช่ JSON ต้อง parser+evaluator และขัดกติกาอ่านเฉพาะค่าที่อยู่ในหน่วยความจำหน้าเกม
-- `window.wox` (`?promo`) ไม่พอ — ไม่มี sim/อีเว้นต์/ข้อความตัวเลือก
-- อย่าใช้ตาราง `bre` ใน `c-577` แทน `RARITY` — ไม่มีน้ำหนัก/ช่วง และคำไม่ตรง (epic = "ล้ำค่า" ไม่ใช่ "หายากมาก")
-- อย่ารัน REA `analyze_javascript_application` ซ้ำด้วยค่าเดิมหลัง investigation เต็ม — จะได้ `resource_constraint` ทุกครั้ง
-- `src/` ในเครื่องเป็น BUILD เก่า `mw3fx19c` ใช้เทียบได้ แต่ไม่ตรงเกมจริง; `tools/snapshot-diff.mjs` ใช้กับเกมเวอร์ชันนี้ไม่ได้แล้ว แต่ **ห้ามลบ** จนนายท่านสั่ง
-- `HANDOFF.md` เวอร์ชันก่อนหน้า (2026-11-17) ถูกแทนที่ด้วยไฟล์นี้ อย่าอ้างเนื้อหาเก่า
-- SDD workspace (ledger + review packages) ถูกลบไปพร้อม worktree เพราะอยู่ใน `.superpowers/` ที่ git-ignore — ruling ทั้งหมดสรุปอยู่ในไฟล์นี้ ถ้าต้องการรายละเอียดให้ดู transcript ของ session 2026-11-17/18
+- **ห้ามแยก subagent** session นี้ส่ง subagent ไปตรวจ design doc หนึ่งครั้ง และนายท่านบอกว่าเปลือง token ตอนนี้กติกานี้อยู่ใน `CLAUDE.md` §7 แล้ว การรีวิวโค้ดก่อน merge ต้องทำเองใน session เดียวกัน
+- **อย่าตั้ง branch protection แบบไม่บังคับ admin** repo นี้เป็นของบัญชีส่วนตัว และเจ้าของเป็นคนเดียวที่ push ถ้าไม่บังคับ admin กฎจะไม่กันใครเลย
+- **อย่ารวม bump version ไว้ใน branch ก่อน merge** ถ้าทำแบบนั้น `release.mjs` จะไม่มีอะไรให้ commit แล้ว throw ก่อน push
+- **อย่าเชื่อ `AGENTS.md`** ไฟล์นี้เขียนก่อนยุค bundle เนื้อหาบางส่วนของ `CLAUDE.md` §2/§4/§6 ก็ตกรุ่นแล้ว (เช่น "ประมาณ 500 บรรทัด" ทั้งที่จริง 904 และ `sim.js:2814`) Task 8 จะแก้
+- **offset ทุกตัวใน `docs/superpowers/notes/2026-11-17-events-spike.md` และ `docs/superpowers/plans/2026-11-17-bundle-port.md` เป็นของ build `mwkobenp`** ใช้กับ `mwky5ysx` ไม่ได้
+- **อย่า `import()` ไฟล์ `app-*.js` หรือ `boot-*.js`** ทั้งในสคริปต์และในเทส เพราะจะรันเกมชุดที่สอง
 
 ## Next step
 
-เริ่มด้วย `superpowers:brainstorming` สำหรับงาน (ก) โดยใช้ `docs/superpowers/notes/2026-11-17-events-spike.md` เป็นข้อมูลตั้งต้น; ก่อนออกแบบให้ตัดสินใจว่าจะตรวจ 5 ข้อใน §4 ของเอกสารก่อนหรือไม่ (ข้อ 1-2 ล้ม = กลับไปถามนายท่านว่าจะเปลี่ยนเป็น (ข) หรือไม่) จากนั้น `superpowers:writing-plans`, รออนุมัติ, แล้วลงโค้ดแบบ TDD ตามกติกาโปรเจกต์
+เริ่ม **Task 0** ของ `docs/superpowers/plans/2026-11-18-audit-fixes.md` ด้วย `superpowers:executing-plans` ขั้นตอนคือ:
+1. สร้าง worktree branch `fix/audit-v3.3.2` แตกจาก `audit/2026-11-18`
+2. รัน `node tools/fetch-bundle.mjs` ใน worktree
+3. รันคำสั่งนี้แล้วต้องได้ pass 24 / skip 1
 
-ลำดับถัดไป: ถ้าเกมมี build ใหม่ ให้ `node tools/fetch-bundle.mjs` ดึง bundle ใหม่ก่อน แล้วเทียบ offset ในเอกสาร spike
+```
+node --check wox-editor.user.js && node --test "tests/**/*.test.mjs"
+```
+
+จากนั้นทำ Task 1 ถึง Task 8 ตามลำดับ commit ทุก task และหลังแต่ละ task เทสต้องได้ skip 0 สุดท้ายคือ Task 9: รีวิว inline → ตั้ง ruleset S1 → merge `--no-ff` เข้า `main` → bump เป็น `3.3.2` → `release.mjs --dry-run` → `release.mjs` → เขียน handoff ใหม่ที่มี id ของ ruleset และรายการตรวจในเกม 7 ข้อ
 
 ## Waiting on the user
 
-- นายท่านยังไม่ได้ตัดสินใจว่าใครตรวจ 5 ข้อในเกมจริง (นายท่านทำเอง หรืออนุญาตให้ใช้ claude-in-chrome)
-- ยังไม่ได้ถามว่าจะแก้ Minor ที่พักไว้ของ v3.3.1 ไหม: retry หลังโหลดล้มทับค่าที่ยังไม่บันทึก, `imported` แบบ all-or-nothing ทำให้แผงขึ้น "ยังไม่ได้อ่าน chunk หลัก" ตลอดถ้า chunk ใดล้มถาวร, comparator ที่ `wox-editor.user.js` ยัง `NaN` กับ tier สตริง (ตัวคัดแยกหลัก), ป้ายกรองระดับ (`#hqr`) ยัง hardcode ชื่อระดับ
+- **หลังปล่อย v3.3.2:** นายท่านต้องอัปเดตสคริปต์ใน Tampermonkey รีโหลดเกม แล้วตรวจ 7 ข้อตาม spec หัวข้อ "ตรวจในเกม" (`docs/superpowers/specs/2026-11-18-audit-fixes-design.md`)
+- **ยังไม่ได้ตอบ (ค้างจาก handoff ก่อน):** ใครเป็นคนตรวจในเกม นายท่านเปิดเองหรือให้ใช้ claude-in-chrome ถ้ายังไม่มีคำตอบ ให้ถือว่านายท่านตรวจเอง
+- **ถ้า push ถูกปฏิเสธหลังตั้ง ruleset:** หยุด อย่าปิดกฎเอง แล้วรายงานนายท่าน
 
 ## Files and places
 
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\wox-editor.user.js`: สคริปต์หลัก v3.3.1 ไฟล์เดียว `LOC` (pure, มีทางเข้าเทส Node) อยู่ต้น IIFE; `loadCore`/`getCore` ประมาณบรรทัด 500-620; แท็บอีเว้นต์/ช่วยเลือกที่ตายอยู่ประมาณ 760-840
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\docs\superpowers\notes\2026-11-17-events-spike.md`: ผลค้นหาอีเว้นต์/ช่วยเลือก + คำตัดสิน (ก) อยู่ §5 — **ไฟล์สำคัญที่สุดของงานถัดไป**
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\docs\superpowers\plans\2026-11-17-bundle-port.md`: แผน Task 1-5 ที่ทำเสร็จแล้ว (อ้างอิงประวัติ ไม่ต้องทำซ้ำ)
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\tests\locate.test.mjs`: เทส 25 ข้อของ `LOC` (pure, ไม่มี mock)
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\tools\release.mjs`: ปล่อยเวอร์ชัน (check + test + commit + push)
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\tools\fetch-bundle.mjs`: ดึง JS ของเกมลง `bundle/<BUILD>/` (git-ignore) — รันใหม่ได้ทุกเมื่อ
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\CLAUDE.md`: กติกาโปรเจกต์ (แก้ล่าสุดให้ตรงระบบ bundle แล้ว)
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\src\`: ซอร์สเกม BUILD เก่า `mw3fx19c` อ่านเทียบเท่านั้น
-- repo: https://github.com/Jeffinz/wox-editor (public) — ปัจจุบันมี branch `main` เดียว
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\docs\superpowers\plans\2026-11-18-audit-fixes.md`: แผนที่ต้องทำ เป็นไฟล์สำคัญที่สุด
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\docs\superpowers\specs\2026-11-18-audit-fixes-design.md`: design ที่อนุมัติแล้ว มีเหตุผลของแต่ละ finding และรายการตรวจในเกม
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\docs\superpowers\notes\2026-11-18-audit-findings.md`: finding F1-F8, S1-S7, R1-R8, T1-T4 พร้อมหลักฐานและเลขบรรทัด (เลขบรรทัดเป็นของ v3.3.1)
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\wox-editor.user.js`: สคริปต์ v3.3.1 ยาว 904 บรรทัด `LOC` อยู่ที่ `:13-123` และทางออกสำหรับเทสอยู่ที่ `:125`
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\tests\locate.test.mjs`: เทสเดิม 25 ข้อ Task 1 จะแก้ `:9-12` และ `:174-183`
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\tools\fetch-bundle.mjs`: ดึง JS ของเกมลง `bundle/<BUILD>/`
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\tools\release.mjs`: ปล่อยเวอร์ชัน (check, commit, push `main`)
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\bundle\mwky5ysx\`: bundle ของเกม (gitignore)
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\CLAUDE.md`: กติกาโปรเจ็ค §7 มีกฎห้ามแยก subagent ส่วน §2/§3/§5/§6 รอแก้ใน Task 8
+- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\journal\2026-11-18.md`: journal ของวันนี้
+- repo: https://github.com/Jeffinz/wox-editor (public)
 
 ## Changes made
 
-- `wox-editor.user.js`: ย้ายไประบบ bundle (Task 1-4) + fix wave — commit `b55d6f8`, merge เข้า main `69e92bf`, ปล่อย `9f94ca5` (pushed)
-- `tests/locate.test.mjs`: สร้างใหม่ 25 เทส — committed
-- `tools/release.mjs`: เพิ่มขั้นรันเทส + staging `tests/` — committed
-- `CLAUDE.md`: อัปเดต §3/§6/§8 ตามระบบ bundle — committed
-- `docs/superpowers/notes/2026-11-17-events-spike.md`: สร้างใหม่ + คำตัดสิน (ก) §5 — committed (`6577af2`)
-- `HANDOFF.md` (ไฟล์นี้): เขียนทับเวอร์ชัน 2026-11-17 — commit ตามหลังไฟล์นี้
-- ลบแล้ว: worktree `C:\Users\PC\Desktop\Wox UI\wox-bundle-fetch` (รวม `.superpowers/` ledger และ `bundle/mwkobenp/` ที่ดึงมา), branch `wip/bundle-fetch` ทั้ง local และ remote
+- `docs/superpowers/specs/2026-11-18-audit-fixes-design.md`: สร้างใหม่ committed ที่ `640064e`
+- `CLAUDE.md` §7: เพิ่มกฎห้ามแยก subagent committed ที่ `640064e`
+- `docs/superpowers/plans/2026-11-18-audit-fixes.md`: สร้างใหม่ committed ที่ `cfe47e6`
+- `HANDOFF.md` (ไฟล์นี้): เขียนทับเวอร์ชัน 01:43 committed บน `audit/2026-11-18`
+- `journal/2026-11-18.md`: เพิ่มหัวข้อ design/แผน (โฟลเดอร์ `journal/` ถูก gitignore ไม่ขึ้น repo)
+- นอก repo: memory `no-subagents.md` ใน `C:\Users\PC\.claude\projects\C--Users-PC-Desktop-Wox-UI-way-of-xian-wox-game-workers-dev\memory\`
+- ไม่มีไฟล์โค้ดถูกแก้ ทั้ง `wox-editor.user.js`, `tests/` และ `tools/` ไม่เปลี่ยน

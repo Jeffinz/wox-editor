@@ -1,5 +1,7 @@
 # ย้ายสคริปต์ไปใช้ bundle ของเกม (BUILD mwkobenp) Implementation Plan
 
+> หมายเหตุ 2026-11-18: offset และชื่อ chunk ในไฟล์นี้เป็นของ build `mwkobenp` ใช้กับ `mwlh9q9f` ไม่ได้ ตัวชี้วัดเชิงโครงสร้าง (`#choice-options`, `weight:.55`, `gap:480`) ยังใช้ได้
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** ให้ `wox-editor.user.js` กลับมาแสดงขั้นพลัง, ขั้นยุทธ์, ไอเทม และระดับไอเทมได้บนเกมเวอร์ชันที่ bundle แล้ว ตรวจระบบและตรวจอัปเดตต้องบอกสถานะจริง ส่วนอีเว้นต์และช่วยเลือกต้องหาทางก่อน แล้วรอนายท่านตัดสินใจ

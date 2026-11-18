@@ -86,12 +86,41 @@
       if (row && typeof row.th === 'string' && typeof row.color === 'string') return [row.th, row.color];
       return TIER_LBL[Math.min(5, tier)] ?? TIER_LBL[0];
     };
+    // ลำดับระดับสตริงของไอเทม (ชื่อตรงกับ RAR_LBL); ย้ายจากฝั่ง DOM มาไว้ที่เดียวเพื่อให้เทสได้
+    const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+    // ระดับชื่อ → ขั้นของเกม: จับคู่ด้วยสีของป้าย (RAR_LBL กับ TIER_LBL) ไม่ใช่ลำดับใน RAR_ORDER
+    // เทาคือสามัญ 0, เขียวคือขั้นปฐพี 2, ฟ้าคือขั้นฟ้า 3, ม่วงคือขั้นสวรรค์ 4, ทองคือขั้นเซียน 5 (ขั้นมนุษย์ไม่มีระดับชื่อคู่)
+    const RAR_TO_TIER = { common: 0, uncommon: 2, rare: 3, epic: 4, legendary: 5 };
+    // ชื่อระดับของไอเทม (pure): สตริงที่อยู่ใน RAR_ORDER เท่านั้น ไม่งั้น null
+    const rarKey = (tier) => (typeof tier === 'string' && RAR_ORDER.includes(tier) ? tier : null);
     // ลำดับชั้นของไอเทมสำหรับกรอง/เรียง (pure): ตัวเลขหรือสตริงตัวเลข → 0-5 (เหมือนเดิม), ไม่มีค่า → 0
-    // สตริงที่ไม่ใช่ตัวเลขจับคู่แถว TIERS ไม่ได้ → null: ต้องเห็นได้ทุกตัวกรองและอยู่ท้ายรายการ
+    // สตริงระดับ (เช่น "epic") → ขั้นของเกมที่มีสีเดียวกันตาม RAR_TO_TIER
+    // สตริงอื่นที่จับคู่ไม่ได้ → null: ต้องเห็นได้ทุกตัวกรองและอยู่ท้ายรายการ
     const tierIdx = (tier) => {
       const raw = tier ?? 0;
+      const rar = rarKey(raw);
+      if (rar) return RAR_TO_TIER[rar];
       const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
       return Number.isFinite(n) ? Math.min(5, n) : null;
+    };
+    // ตัวเรียงไอเทม (pure, ห้าม throw): ระดับสูงก่อน → ระดับที่รู้ไม่ได้อยู่ท้าย → ชื่อช่อง
+    // slot อาจไม่ใช่สตริงหรือไม่มีเลย จึงต้องแปลงด้วย String เสมอ (ของเดิมเรียก slot.localeCompare ตรง ๆ แล้ว throw)
+    const itemOrder = (a, b) => {
+      const x = tierIdx(a?.tier), y = tierIdx(b?.tier);
+      const slot = (i) => String(i?.slot ?? '');
+      if (x === null || y === null) return (x === null) - (y === null) || slot(a).localeCompare(slot(b));
+      return y - x || slot(a).localeCompare(slot(b));
+    };
+    // ไอเทมผ่านตัวกรองระดับไหม (pure): "all" ผ่านหมด
+    // ไอเทมระดับชื่อ ("epic") ตรงกับตัวกรอง "r:<ชื่อ>" เท่านั้น; ไอเทมขั้นตัวเลขตรงกับตัวกรองขั้นของเกม
+    // ระดับที่รู้ไม่ได้ผ่านทุกตัวกรอง (เหมือนของเดิม)
+    const tierMatches = (item, filter) => {
+      const f = String(filter ?? 'all');
+      if (f === 'all') return true;
+      const rar = rarKey(item?.tier);
+      if (rar) return f === 'r:' + rar;
+      const k = tierIdx(item?.tier);
+      return k === null || String(k) === f;
     };
     // อ่านค่าตัวเลขจากช่องกรอก (pure): คืน null เมื่อว่างหรือไม่ใช่จำนวนจริง เพื่อไม่ให้เขียน 0 ทับค่าเดิม
     const numOr = (x) => {
@@ -101,6 +130,8 @@
       const n = +s;
       return Number.isFinite(n) ? n : null;
     };
+    // ค่าที่จะเขียนลงช่องที่ว่างแล้วควรคงค่าเดิม (pure): ช่องว่าง/ไม่ใช่ตัวเลข → ใช้ค่าเดิม (ไม่ใช่ตัวเลข → 0)
+    const numOrKeep = (x, prev) => numOr(x) ?? (Number.isFinite(prev) ? prev : 0);
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
     // ต้องตรงกับ URL ที่เกมใช้ทุกตัวอักษรเพื่อให้ได้ module instance เดิม
     const chunkUrl = (p, origin) => new URL(p, origin).href;
@@ -119,18 +150,66 @@
     };
     // อ่าน chunk หลักได้จริงหรือยัง (pure): มี build แต่ core ว่างหรือ import ไม่ครบ = ยังไม่ได้อ่าน ห้ามลงว่าตารางหาย
     const coreLoaded = (c) => Array.isArray(c?.core) && c.core.length > 0 && c.imported === true;
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf, tierIdx, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded };
+    // รวมตารางของรอบใหม่กับของเดิม (pure, ห้าม throw): คีย์ที่รอบใหม่เป็น null ให้คงของเดิมไว้
+    // กันตารางที่อ่านได้แล้วหายไปตอนกด "ตรวจอีกครั้ง" แล้วรอบสองโหลดได้ไม่ครบ
+    const keepTables = (prev, next) => {
+      const out = {};
+      for (const k of ['realms', 'martialRanks', 'tiers', 'items']) out[k] = next?.[k] ?? prev?.[k] ?? null;
+      return out;
+    };
+    // แผงเก่าของสคริปต์เราที่ควรถูกลบหรือไม่ (pure): ต้องเป็น div ลูกตรงของ body ที่มี shadow root
+    // ตัวระบุคือ aria-label ของ .w#w ซึ่งมีทุกรุ่นตั้งแต่ v3.0.0 ถึง v3.3.1; ข้อความในเนื้อหาไม่นับ (ของคนอื่นอาจมีคำเดียวกัน)
+    const isStalePanel = (info) => !!info && info.tag === 'DIV' && info.hasShadow === true && info.ours !== true && info.label === 'WoX Editor';
+    // ข้อความเดียวของแท็บอีเว้นต์/ช่วยเลือกเมื่อยังไม่รองรับเกมแบบ bundle (ทุกจุดที่พูดเรื่องนี้ใช้ค่านี้)
+    const EV_UNSUPPORTED = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
+    // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore() (ตรวจระบบกับตรวจอัปเดตอ่านชุดเดียวกัน)
+    const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
+    // ฟิลด์ของ state ที่แผงแก้ได้: กลุ่มแรกต้องมี กลุ่มหลังมีหรือไม่มีก็ได้ตามเส้นทางของตัวละคร
+    const STATE_REQUIRED = ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi'];
+    const STATE_OPTIONAL = ['martial', 'pending'];
+    const baseName = (p) => String(p ?? '').slice(String(p ?? '').lastIndexOf('/') + 1);
+    // บรรทัดตารางในแผงตรวจระบบ (pure, ห้าม throw): ไม่รวมบรรทัด BUILD ซึ่งผู้เรียกสร้างเอง
+    // ข้อความ ☑ ใช้เฉพาะเมื่อรู้แน่แล้วเท่านั้น: chunk โหลดไม่ครบต้องเป็น "–" ไม่ใช่ "✖"
+    const tableLines = (c) => {
+      if (c?.reason === 'no-state') return ['– รอข้อมูลเกมเกิน 2 นาที เล่นในเกมสัก 1 เดือนแล้วกดตรวจอีกครั้ง'];
+      if (!c || !Array.isArray(c.core) || c.core.length === 0) return ['– ยังไม่ได้อ่าน chunk หลัก'];
+      const loaded = coreLoaded(c);
+      return TABLES.map(([label, key]) => {
+        if (c[key]) return `✔ ${label} (${c.where?.[key] || 'chunk หลัก'})`;
+        if (loaded) return `✖ ${label}: หาไม่เจอใน chunk หลัก`;
+        const failed = (c.failed ?? []).map(baseName).join(', ');
+        return `– ${label}: ยังไม่แน่ใจ (chunk ${failed} โหลดไม่ได้)`;
+      });
+    };
+    // บรรทัด state ในแผงตรวจระบบ (pure, ห้าม throw): ฟิลด์ไม่บังคับมีหรือไม่มีก็ไม่ใช่ error
+    const stateLines = (t, statKeys) => {
+      if (!t) return ['– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)'];
+      const out = [];
+      const miss = STATE_REQUIRED.filter((k) => t[k] === undefined);
+      out.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
+      const sm = (statKeys ?? []).filter((k) => t.stats?.[k] === undefined);
+      if (sm.length) out.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
+      out.push(t.martial ? '✔ martial' : '– martial: ไม่มี (ตัวละครไม่ได้อยู่สายยุทธ์)');
+      out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
+      return out;
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
   const VERSION = '3.3.1'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
+  // tables = ตารางที่อ่านได้สะสมข้ามรอบ (F2); chainCache = ชื่อ chunk ที่หาได้แล้ว ใช้ข้าม fetch สามไฟล์ตอน retry (R2)
+  let tables = null, chainCache = null;
 
   // จับ state ตอนเกมเซฟ (ต้องเกิดอย่างน้อย 1 ครั้ง)
   const orig = JSON.stringify;
   JSON.stringify = function (o, r, s) {
-    if (o && typeof o === 'object' && 'money' in o && 'stats' in o && 'ageMonths' in o) t = o;
+    // ต้องไม่ทำให้เกมพัง: proxy หรือ object แปลกที่ прибор 'in' แล้ว throw ให้ข้ามการจับ state
+    let hit = false;
+    try { hit = !!o && typeof o === 'object' && 'money' in o && 'stats' in o && 'ageMonths' in o; } catch { hit = false; }
+    if (hit) t = o;
     return orig.call(this, o, r, s);
   };
 
@@ -254,6 +333,7 @@
 
   addEventListener('DOMContentLoaded', () => {
     const host = document.createElement('div');
+    host.dataset.woxed = VERSION; // แผงรุ่นหลังรู้จักกันด้วยค่านี้ ไม่ต้องอ่านเนื้อหา shadow root
     const root = host.attachShadow({ mode: 'open' });
     const $ = (id) => root.getElementById(id);
     root.innerHTML = `
@@ -368,11 +448,16 @@
       });
     }
     document.body.appendChild(host);
-    // สคริปต์รุ่นเก่าที่ยังค้างอยู่ใน Tampermonkey จะวาดแผงซ้อนทับ จึงลบแผง WoX อื่นที่ไม่ใช่ของเรา
+    // สคริปต์รุ่นเก่า (v3.0.0-3.3.1) ที่ยังค้างอยู่ใน Tampermonkey จะวาดแผงซ้อนทับ จึงลบเฉพาะแผงของรุ่นนั้น
+    // ตัวระบุ: div ลูกตรงของ body + มี shadow root + .w#w aria-label="WoX Editor" (ไม่ใช้ข้อความในเนื้อหา เพราะอาจลบของคนอื่น)
     // (เฝ้าเฉพาะลูกตรงของ body เพื่อจับแผงที่มาทีหลัง; การลบไม่ทำให้เกิดการวนซ้ำ)
     const dropStalePanels = () => {
-      for (const d of document.body.children) {
-        if (d !== host && d.shadowRoot?.textContent.includes('WoX Editor')) d.remove();
+      for (const d of Array.from(document.body.children)) {
+        const info = {
+          tag: d.tagName, hasShadow: !!d.shadowRoot, ours: d === host || 'woxed' in d.dataset,
+          label: d.shadowRoot?.querySelector('#w')?.getAttribute('aria-label') ?? null,
+        };
+        if (LOC.isStalePanel(info)) d.remove();
       }
     };
     dropStalePanels();
@@ -444,25 +529,23 @@
     const RAR_LBL = LOC.RAR_LBL;
     const rarDot = (c) => `<i class="rdot" style="background:${c}"></i>`;
     const itemRar = (i) => LOC.tierOf(i, TIERS);
-    const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+    const RAR_ORDER = LOC.RAR_ORDER;
     const evKey = (e) => { try { return SIM?.rarityFor?.(e) ?? 'common'; } catch { return 'common'; } };
     const evRar = (e) => RAR_LBL[evKey(e)] ?? RAR_LBL.common;
     // ลำดับชั้นของไอเทม: ใช้ LOC.tierIdx (null = จับคู่แถว TIERS ไม่ได้)
-    const tierIdx = (i) => LOC.tierIdx(i?.tier);
-    // ตัวเลือกระดับความหายากในช่องกรอง (ค่า "all" = ทุกระดับ)
-    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' + TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('');
+    // ตัวเลือกระดับในช่องกรองมีสองกลุ่ม เพราะไอเทม tier เป็นได้ทั้งตัวเลข (ขั้นของเกม 0-5) และชื่อ (RAR_LBL)
+    // ถ้ามีแต่กลุ่มตัวเลข ผู้ใช้จะกรองตามป้ายที่เห็นบนไอเทม ("[ตำนาน]") ไม่ได้
+    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' +
+      TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('') +
+      '<optgroup label="ความหายาก">' + RAR_ORDER.map((k) => `<option value="r:${k}">${RAR_LBL[k][0]}</option>`).join('') + '</optgroup>';
     $('hevr').innerHTML = '<option value="all">ทุกระดับ</option>' + RAR_ORDER.map((k) => `<option value="${k}">${RAR_LBL[k][0]}</option>`).join('');
     let itemList = [];
     const drawItems = () => {
       const q = norm($('hq').value).trim(), r = $('hqr').value;
       // เรียงหายากก่อน (ขั้นสูงไปต่ำ) แล้วตามประเภทช่อง; ไอเทมที่รู้ระดับไม่ได้อยู่ท้ายและเห็นได้ทุกตัวกรอง
       const hit = itemList
-        .filter((i) => (r === 'all' || tierIdx(i) === null || String(tierIdx(i)) === r) && (!q || norm(i.th).includes(q) || norm(i.en).includes(q) || norm(i.id).includes(q)))
-        .sort((a, b) => {
-          const x = tierIdx(a), y = tierIdx(b);
-          if (x === null || y === null) return (x === null) - (y === null) || a.slot.localeCompare(b.slot);
-          return y - x || a.slot.localeCompare(b.slot);
-        });
+        .filter((i) => LOC.tierMatches(i, r) && (!q || norm(i.th).includes(q) || norm(i.en).includes(q) || norm(i.id).includes(q)))
+        .sort(LOC.itemOrder);
       $('hit').innerHTML = hit.slice(0, 300).map((i) => `<option value="${esc(i.id)}">[${esc(itemRar(i)[0])}] ${esc(i.th)}  ·  ${esc(i.slot)}</option>`).join('');
       if ($('hit').options.length) $('hit').selectedIndex = 0;
       $('hqn').textContent = hit.length ? `พบ ${hit.length} รายการ${hit.length > 300 ? ' (แสดง 300 รายการแรก)' : ''}` : 'ไม่พบไอเทมที่ตรงกับคำค้น ลองใช้คำสั้นลง';
@@ -491,6 +574,8 @@
     };
     const drawEvents = () => {
       buildEvents();
+      // เกมแบบ bundle ยังไม่มีแหล่งข้อมูลอีเว้นต์: ห้ามลงว่า "ไม่พบ" เพราะผู้ใช้จะคิดว่าค้นผิด
+      if (!SIM && !EVENTS.length) { $('hevn').textContent = LOC.EV_UNSUPPORTED; return; }
       const q = norm($('hevq').value).trim(), g = $('hevg').value, r = $('hevr').value;
       const key = new Map(EVENTS.map((e) => [e.id, evKey(e)]));
       // เรียงหายากก่อน (ตำนานไปธรรมดา) แล้วตามชื่อ
@@ -521,8 +606,11 @@
     const loadCore = async () => {
       // where = ชื่อไฟล์ chunk ที่เจอตารางนั้น (แผงตรวจระบบใช้อ้างอิง); boot/app/core ใช้เก็บฐานใน woxed.manifest
       // imported = import() chunk หลักสำเร็จครบทุกตัวหรือยัง; ตรวจระบบ/ตรวจอัปเดตอ่านค่านี้ก่อนลงว่าตารางหาย
+      // failed = path ของ chunk ที่ import ไม่ได้ (แผงตรวจระบบใช้บอกว่า "ยังไม่แน่ใจ" ไม่ใช่ "หาไม่เจอ")
+      // reason = 'no-state' เมื่อรอ state ครบ 2 นาทีแล้วยังไม่ได้ (แผงบอกผู้ใช้ให้เล่นต่อ)
       const out = {
-        build: '', boot: '', app: null, core: [], imported: false, where: { realms: '', martialRanks: '', tiers: '', items: '' },
+        build: '', boot: '', app: null, core: [], imported: false, failed: [], reason: '',
+        where: { realms: '', martialRanks: '', tiers: '', items: '' },
         realms: null, martialRanks: null, tiers: null, items: null,
       };
       if (isWiki()) return out;
@@ -534,15 +622,21 @@
       try {
         out.build = (await text('/src/build.js')).match(/BUILD\s*=\s*"([^"]+)"/)?.[1] ?? '';
       } catch { /* ไม่มี BUILD ก็ไม่เป็นไร */ }
-      if (!(await waitState())) return out;
+      if (!(await waitState())) { out.reason = 'no-state'; return out; }
       try {
-        const idx = await text('/');
-        const bootPath = LOC.chunkChain(idx, '', '').boot;
-        if (!bootPath) return out;
-        const bootText = await text(bootPath);
-        const appPath = LOC.chunkChain(idx, bootText, '').app;
-        if (!appPath) return out;
-        const chain = LOC.chunkChain(idx, bootText, await text(appPath));
+        // ชื่อ chunk ไม่เปลี่ยนตลอดอายุหน้า จึงจำ chain ที่หาได้ครบแล้วไว้ กัน fetch /, boot, app ซ้ำตอนกด "ตรวจอีกครั้ง"
+        // import chunk ซ้ำไม่เสียเครือข่าย เพราะเบราว์เซอร์ใช้ module cache อยู่แล้ว
+        let chain = chainCache;
+        if (!chain) {
+          const idx = await text('/');
+          const bootPath = LOC.chunkChain(idx, '', '').boot;
+          if (!bootPath) return out;
+          const bootText = await text(bootPath);
+          const appPath = LOC.chunkChain(idx, bootText, '').app;
+          if (!appPath) return out;
+          chain = LOC.chunkChain(idx, bootText, await text(appPath));
+          if (chain.app && chain.core.length > 0) chainCache = chain;
+        }
         out.boot = chain.boot;
         out.app = chain.app;
         out.core = chain.core;
@@ -553,7 +647,7 @@
             // path เต็มมาจาก boot file แล้ว จึงใช้ path นั้นสร้าง URL เอง ไม่ hardcode โฟลเดอร์ /b/
             // URL ต้องเหมือนที่เกมใช้ทุกตัวอักษรเพื่อได้ module instance เดิม (ไม่ใส่ query กันแคช)
             mods.push({ path: p, ns: await import(LOC.chunkUrl(p, location.origin)) });
-          } catch { out.imported = false; /* chunk หนึ่งโหลดไม่ได้ ต้องไม่ทำให้เกมหยุด */ }
+          } catch { out.imported = false; out.failed.push(p); /* chunk หนึ่งโหลดไม่ได้ ต้องไม่ทำให้เกมหยุด */ }
         }
         // คืนทั้งค่าและชื่อไฟล์ chunk ที่เจอ เพื่อให้แผงตรวจระบบบอกได้ว่าตารางมาจากไฟล์ไหน
         const find = (test) => {
@@ -577,36 +671,45 @@
     const ITEMS_FAIL = 'โหลดรายการไอเทมไม่ได้ ลองรีโหลดหน้าเกม หรือเกมเปลี่ยนโครงสร้างไอเทม ดูแผงตรวจระบบ';
     const renderCore = (c) => {
       if (isWiki()) return;
-      if (c.realms) {
-        REALMS = c.realms;
+      // รวมกับตารางรอบก่อน: รอบนี้ที่โหลดไม่ครบต้องไม่ทำให้ตารางที่อ่านได้แล้วหาย (F2)
+      tables = LOC.keepTables(tables, c);
+      if (tables.realms) {
+        REALMS = tables.realms;
         $('h_realm').innerHTML = REALMS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)} (${r.layers} ชั้น)</option>`).join('');
       }
-      if (c.martialRanks) {
-        $('h_mrank').innerHTML = c.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
+      if (tables.martialRanks) {
+        $('h_mrank').innerHTML = tables.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
       }
       // ต้องตั้ง TIERS ก่อน drawItems() เพราะรายการไอเทมอ่านป้ายระดับจากตารางของเกม
-      TIERS = c.tiers;
-      if (c.items) {
-        ITEMS = c.items;
+      TIERS = tables.tiers;
+      if (tables.items) {
+        ITEMS = tables.items;
         // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
-        itemList = Object.getOwnPropertyNames(ITEMS).map((k) => ITEMS[k]).filter((i) => i && i.id)
-          .sort((a, b) => a.slot.localeCompare(b.slot) || (a.tier ?? 0) - (b.tier ?? 0));
+        itemList = Object.getOwnPropertyNames(tables.items).map((k) => tables.items[k]).filter((i) => i && i.id)
+          .sort(LOC.itemOrder);
         drawItems();
       } else $('hqn').textContent = ITEMS_FAIL;
       // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404)
-      $('hevn').textContent = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
+      $('hevn').textContent = LOC.EV_UNSUPPORTED;
       fresh(true);
     };
     // promise เดียวใช้ร่วมกันทั้งวาดแผง ตรวจระบบ และตรวจอัปเดต: fetch index/boot/app ครั้งเดียวต่อรอบ
-    // ถ้าผลออกมาไม่ครบ (fetch ล้ม หรือ state ยังไม่มา) ให้ล้าง promise เพื่อให้กด "ตรวจอีกครั้ง" ลองใหม่ได้
-    // ตัวจัดการนี้รับเฉพาะ promise ของ loadCore; บั๊กตอนวาดแผงต้องโผล่ใน console ไม่ใช่ถูกกลืนเป็นข้อความนี้
+    // ถ้าผลออกมาไม่ครบ (fetch ล้ม หรือ state ยังไม่มา) หรือวาดแผง throw ให้ล้าง promise เพื่อให้กด "ตรวจอีกครั้ง" ลองใหม่ได้
+    // บั๊กตอนวาดแผงต้องโผล่ใน console (ไม่ใช่ถูกกลืนเป็นข้อความในแผง) แต่ต้องไม่ทำให้ปุ่มตรวจอีกครั้งตาย
     let corePromise = null;
     const startCore = () => {
       const p = loadCore();
       corePromise = p;
       p.then((c) => {
-        renderCore(c); // วาดเท่าที่ได้ (renderCore จัดการตารางที่ไม่มาเอง)
-        if (!LOC.coreLoaded(c) && corePromise === p) corePromise = null; // ผลไม่ครบ: รอบหน้าตรวจใหม่ได้
+        const done = LOC.coreLoaded(c); // ตัดสินใจก่อนวาด: renderCore อาจ throw
+        let failed = false;
+        try {
+          renderCore(c); // วาดเท่าที่ได้ (renderCore จัดการตารางที่ไม่มาเอง)
+        } catch (e) {
+          failed = true;
+          console.error('[WoX Editor]', e);
+        }
+        if ((!done || failed) && corePromise === p) corePromise = null; // ผลไม่ครบ/วาดพลาด: รอบหน้าตรวจใหม่ได้
       }, () => {
         if (corePromise === p) corePromise = null;
         $('hqn').textContent = ITEMS_FAIL;
@@ -621,7 +724,8 @@
     const name = (id) => ITEMS?.[id]?.th ?? id;
     const fresh = (force) => {
       if (!t) return false;
-      if (force || root.activeElement?.tagName !== 'INPUT') {
+      // ไม่เขียนทับช่องที่ผู้ใช้กำลังแก้: ครอบทั้งช่องกรอก ช่องเลือก และกล่องข้อความ
+      if (force || !['INPUT', 'SELECT', 'TEXTAREA'].includes(root.activeElement?.tagName)) {
         $('h_mst').textContent = t.martial ? '' : 'ตัวละครนี้ไม่ได้อยู่สายยุทธ์ จึงแก้ส่วนนี้ไม่ได้';
         if (t.martial) { $('h_mrank').value = t.martial.rank; $('h_mstage').value = t.martial.stage; $('h_mforce').value = Math.round(t.martial.force ?? 0); }
         $('h_karma').value = t.karma ?? 0; $('h_fame').value = t.fame ?? 0;
@@ -636,13 +740,18 @@
       return true;
     };
     const setStat = (k, v) => {
-      t.stats[k] = v;
+      (t.stats ??= {})[k] = v;
       (t.capSeen ??= {})[k] = Math.max(t.capSeen[k] ?? 0, v); // กันเกมดึงค่ากลับลงตามเพดาน
     };
 
+    // เขียน DOM เฉพาะเมื่อสถานะเปลี่ยน (ทุกวินาทีเดิมเขียนทับทุกครั้งโดยไม่จำเป็น)
+    let lastOn = null;
     setInterval(() => {
-      $('dot').classList.toggle('on', !!t);
-      $('hs').textContent = t ? 'เชื่อมต่อแล้ว' : 'รอข้อมูลเกม · เล่นในเกม 1 เดือน';
+      const on = !!t;
+      if (on === lastOn) return;
+      lastOn = on;
+      $('dot').classList.toggle('on', on);
+      $('hs').textContent = on ? 'เชื่อมต่อแล้ว' : 'รอข้อมูลเกม · เล่นในเกม 1 เดือน';
     }, 1000);
 
     // ---------- ปุ่มต่างๆ ----------
@@ -655,39 +764,56 @@
       if (b.id === 'hchkb') return runHealth();
       if (!t) return toast('ยังไม่ได้รับข้อมูลเกม ให้เล่นในเกมสัก 1 เดือนก่อน', true);
       let msg = 'บันทึกแล้ว';
-      if (b.id === 'hmb') t.money = +$('hm').value || 0;
-      else if (b.id === 'hmr') {
+      // ช่องว่าง/ไม่ใช่ตัวเลข = ไม่เขียนอะไรทับค่าเดิม (เดิมเขียน 0 ทับ) แล้วบอกผู้ใช้
+      if (b.id === 'hmb') {
+        const money = LOC.numOr($('hm').value);
+        if (money === null) return toast('ใส่ตัวเลขก่อน', true);
+        t.money = money;
+      } else if (b.id === 'hmr') {
         if (!t.martial) return toast('ตัวละครนี้ไม่ได้อยู่สายยุทธ์', true);
         // ยังอ่านตาราง MARTIAL_RANKS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ rank 0 ทับค่าเดิม
         if (!$('h_mrank').options.length) return toast('ยังอ่านตารางระดับสายยุทธ์ไม่ได้ รอสักครู่แล้วลองใหม่', true);
         const rank = LOC.numOr($('h_mrank').value);
         if (rank === null) return toast('เลือกระดับสายยุทธ์ก่อน', true);
         t.martial.rank = rank;
-        t.martial.stage = LOC.numOr($('h_mstage').value) ?? 0;
-        t.martial.force = LOC.numOr($('h_mforce').value) ?? 0;
-      } else if (d.n) t[d.n] = +$('h_' + d.n).value || 0;
-      else if (b.id === 'hrl') {
+        t.martial.stage = LOC.numOrKeep($('h_mstage').value, t.martial.stage);
+        t.martial.force = LOC.numOrKeep($('h_mforce').value, t.martial.force);
+      } else if (d.n) {
+        const v = LOC.numOr($('h_' + d.n).value);
+        if (v === null) return toast('ใส่ตัวเลขก่อน', true);
+        t[d.n] = v;
+      } else if (b.id === 'hrl') {
         // ยังอ่านตาราง REALMS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ realm 0 ทับค่าเดิม
         if (!$('h_realm').options.length) return toast('ยังอ่านตารางขั้นพลังไม่ได้ รอสักครู่แล้วลองใหม่', true);
         const realm = LOC.numOr($('h_realm').value);
         if (realm === null) return toast('เลือกขั้นพลังก่อน', true);
         t.realm = realm;
-        t.layer = LOC.numOr($('h_layer').value) ?? 0;
-        t.qi = LOC.numOr($('h_qi').value) ?? 0;
+        t.layer = LOC.numOrKeep($('h_layer').value, t.layer);
+        t.qi = LOC.numOrKeep($('h_qi').value, t.qi);
         if (t.realm > 0) t.cultivating = true;
-      } else if (d.s) setStat(d.s, +$('s_' + d.s).value || 0);
-      else if (b.id === 'hsa') for (const [k] of STATS) setStat(k, +$('s_' + k).value || 0);
-      else if (d.bset) {
-        const v = Math.max(0, +root.querySelector(`[data-b="${CSS_ESC(d.bset)}"]`).value || 0);
+      } else if (d.s) {
+        const v = LOC.numOr($('s_' + d.s).value);
+        if (v === null) return toast('ใส่ตัวเลขก่อน', true);
+        setStat(d.s, v);
+      } else if (b.id === 'hsa') {
+        // ข้ามช่องที่ว่าง เขียนเฉพาะช่องที่มีค่า; ว่างทั้งหมด = ไม่ทำอะไรและบอกผู้ใช้
+        const filled = STATS.map(([k]) => [k, LOC.numOr($('s_' + k).value)]).filter(([, v]) => v !== null);
+        if (!filled.length) return toast('ใส่ตัวเลขก่อน', true);
+        for (const [k, v] of filled) setStat(k, v);
+      } else if (d.bset) {
+        const n = LOC.numOr(root.querySelector(`[data-b="${CSS_ESC(d.bset)}"]`).value);
+        if (n === null) return toast('ใส่ตัวเลขก่อน', true);
+        const v = Math.max(0, n); // 0 = ลบไอเทม; ตัวเลขติดลบไม่มีความหมาย จึงนับเป็น 0
         (t.bag ??= {}); v ? (t.bag[d.bset] = v) : delete t.bag[d.bset];
       } else if (d.bdel) { delete t.bag[d.bdel]; msg = 'ลบแล้ว'; }
       else if (b.id === 'hadd') {
-        const id = $('hit').value, n = +$('hn').value || 0;
+        const id = $('hit').value, n = LOC.numOr($('hn').value);
         if (!ITEMS?.[id]) return toast('เลือกไอเทมจากรายการก่อน', true);
-        if (n <= 0) return toast('ใส่จำนวนที่มากกว่า 0', true);
+        if (n === null || n <= 0) return toast('ใส่จำนวนที่มากกว่า 0', true);
         (t.bag ??= {})[id] = (t.bag[id] ?? 0) + n;
         msg = `เพิ่ม ${name(id)} ×${n} แล้ว`;
       } else if (b.id === 'hevb') {
+        if (!SIM && !EVENTS.length) return toast(LOC.EV_UNSUPPORTED, true);
         const ev = SIM?.majorEvent($('hevl').value) ?? EVENTS.find((x) => x.id === $('hevl').value);
         if (!ev) return toast('เลือกอีเว้นต์จากรายการก่อน', true);
         if (t.pending && !confirm('ตอนนี้มีอีเว้นต์ค้างอยู่ จะเขียนทับไหม')) return;
@@ -763,6 +889,8 @@
     // ป้ายแนะนำวางทับข้างปุ่มบนการ์ด: อยู่ใน shadow root ของเราเอง จึงไม่แตะ DOM ของเกม และ observer ไม่เห็น
     // pointer-events: none ทำให้คลิกปุ่มของเกมได้ตามปกติ
     function placeBadges() {
+      // ไม่มีป้ายให้วางและไม่มีป้ายค้าง = ไม่ต้องแตะ DOM เลย
+      if (!aiBadges.length && !root.querySelector('.aibadge')) return;
       root.querySelectorAll('.aibadge').forEach((n) => n.remove());
       for (const k of aiBadges) {
         if (!k.b.isConnected) continue;
@@ -776,8 +904,15 @@
         root.appendChild(el);
       }
     }
-    addEventListener('scroll', placeBadges, { passive: true, capture: true });
-    addEventListener('resize', placeBadges);
+    // scroll/resize ยิงถี่มาก: วางป้ายครั้งเดียวต่อเฟรมพอ
+    let badgeQueued = false;
+    const queueBadges = () => {
+      if (badgeQueued) return;
+      badgeQueued = true;
+      requestAnimationFrame(() => { badgeQueued = false; placeBadges(); });
+    };
+    addEventListener('scroll', queueBadges, { passive: true, capture: true });
+    addEventListener('resize', queueBadges);
     function aiScan() {
       const cfg = aiCfg();
       const btns = t?.pending?.kind === 'major' ? [...document.querySelectorAll('#choice-options button[id^="choice-"]')] : [];
@@ -837,22 +972,16 @@
         placeBadges();
       });
     });
-    aiObs.observe(document.body, { childList: true, subtree: true });
+    // เกมแบบ bundle ไม่มี SIM = ไม่มีแหล่งข้อมูลอีเว้นต์ให้เฝ้า จึงไม่เริ่ม observer จนงาน (ก) ต่อข้อมูลจริง
+    if (SIM) aiObs.observe(document.body, { childList: true, subtree: true });
 
     // ---------- ตรวจระบบหลังเกมอัปเดต: ตารางจาก chunk หลัก + ฟิลด์ของ state ----------
-    // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore()
-    const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
-    const STATE_KEYS = ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi'];
+    // ตารางและฟิลด์ state อยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
+    const TABLES = LOC.TABLES;
+    const statKeys = STATS.map(([k]) => k);
     const runHealth = async () => {
       // ตรวจ state ก่อน เพราะทำได้ทันทีโดยไม่ต้องรอ chunk
-      const state = [];
-      if (!t) state.push('– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)');
-      else {
-        const miss = STATE_KEYS.filter((k) => t[k] === undefined);
-        state.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
-        const sm = STATS.map(([k]) => k).filter((k) => t.stats?.[k] === undefined);
-        if (sm.length) state.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
-      }
+      const state = LOC.stateLines(t, statKeys);
       const head = [`สคริปต์ v${VERSION}`];
       const show = (lines) => { $('hchk').textContent = lines.join('\n'); console.info('[WoX Editor]\n' + lines.join('\n')); };
       if (isWiki()) { show([...head, '– หน้า wiki ไม่มี chunk หลักของเกม จึงตรวจตารางไม่ได้', ...state]); return; }
@@ -861,14 +990,9 @@
       const c = await getCore().catch(() => null);
       const lines = [...head];
       lines.push(c?.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
-      // อ่าน BUILD ได้แต่ chunk ไม่มา (state ยังไม่มา / index-boot-app อ่านไม่ได้) = ยังไม่ได้ตรวจจริง ห้ามลงว่า ✖ ทุกตาราง
-      if (!LOC.coreLoaded(c)) lines.push('– ยังไม่ได้อ่าน chunk หลัก');
-      else {
-        for (const [label, key] of TABLES) {
-          lines.push(c[key] ? `✔ ${label} (${c.where?.[key] || 'chunk หลัก'})` : `✖ ${label}: หาไม่เจอใน chunk หลัก`);
-        }
-      }
-      lines.push('– อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle (ดู Task 5)');
+      // ตารางที่ยังไม่รู้ (chunk โหลดไม่ครบ / state ยังไม่มา) ต้องขึ้น "–" ไม่ใช่ "✖" (LOC.tableLines ตัดสินให้)
+      lines.push(...LOC.tableLines(c));
+      lines.push('– ' + LOC.EV_UNSUPPORTED);
       show([...lines, ...state]);
     };
     // ตรวจการอัปเดต: ใช้ build กับชื่อ chunk จาก loadCore() เทียบกับฐานใน localStorage

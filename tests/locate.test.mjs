@@ -3,13 +3,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const LOC = require('../wox-editor.user.js');
 // ไฟล์เกมที่ดาวน์โหลดมา (bundle/) ไม่ได้อยู่ใน repo; ถ้าไม่มีให้ข้ามเทสที่ใช้ไฟล์จริง
-const BUNDLE = new URL('../bundle/mwkobenp/', import.meta.url);
-const haveBundle = existsSync(new URL('index.html', BUNDLE));
+// เลือกโฟลเดอร์เองเพื่อไม่ให้ผูกกับ build ใด build หนึ่ง: WOX_BUNDLE (path หรือชื่อ BUILD) → โฟลเดอร์ที่ใหม่สุด
+const bundleDir = () => {
+  const env = process.env.WOX_BUNDLE;
+  if (env) {
+    const full = resolve(env);
+    if (existsSync(join(full, 'index.html'))) return pathToFileURL(full + sep);
+    const asBuild = new URL('../bundle/' + env + '/', import.meta.url);
+    return existsSync(new URL('index.html', asBuild)) ? asBuild : null;
+  }
+  const root = new URL('../bundle/', import.meta.url);
+  let best = null;
+  let bestMs = -1;
+  let names = [];
+  try { names = readdirSync(root); } catch { return null; }
+  for (const name of names) {
+    const dir = new URL(name + '/', root);
+    if (!existsSync(new URL('index.html', dir))) continue;
+    const ms = statSync(dir).mtimeMs;
+    if (ms > bestMs) { bestMs = ms; best = dir; }
+  }
+  return best;
+};
 
 test('pick finds the one realms export', () => {
   const ns = { q: [{ id: 'mortal', lifespan: 75, layers: 0 }], x: [1, 2] };
@@ -79,13 +101,14 @@ test('tierOf อ่าน tier ที่เป็นสตริงตัวเ�
   assert.deepEqual(LOC.tierOf({ tier: '0' }, [{ th: 'ทดสอบ', en: 'Test', color: '#123456' }]), ['ทดสอบ', '#123456']);
 });
 
-test('tierIdx: ตัวเลขคงเดิม, สตริงตัวเลขนับเป็นตัวเลข, ระดับที่จับคู่ไม่ได้ได้ null', () => {
+test('tierIdx: ตัวเลขคงเดิม, สตริงตัวเลขนับเป็นตัวเลข, สตริงระดับได้ index, ระดับที่จับคู่ไม่ได้ได้ null', () => {
   assert.equal(LOC.tierIdx(0), 0);
   assert.equal(LOC.tierIdx(9), 5);
   assert.equal(LOC.tierIdx('3'), 3);
   assert.equal(LOC.tierIdx(undefined), 0);
   assert.equal(LOC.tierIdx(null), 0);
-  assert.equal(LOC.tierIdx('legendary'), null);
+  assert.equal(LOC.tierIdx('legendary'), 5);
+  assert.equal(LOC.tierIdx('weird'), null);
 });
 
 test('numOr: ค่าว่างหรือไม่ใช่จำนวนจริงคืน null', () => {
@@ -171,15 +194,32 @@ test('usableManifest: รับเฉพาะ object ธรรมดาที�
   assert.equal(LOC.usableManifest({ build: 'a', files: {} }), false);
 });
 
-test('chunkChain reads the real mwkobenp chain', (t) => {
-  if (!haveBundle) return t.skip('run node tools/fetch-bundle.mjs first');
-  const index = readFileSync(new URL('index.html', BUNDLE), 'utf8');
-  const boot = readFileSync(new URL('b/boot-3ENUIJBD.js', BUNDLE), 'utf8');
-  const app = readFileSync(new URL('b/app-56NJKGMX.js', BUNDLE), 'utf8');
-  const c = LOC.chunkChain(index, boot, app);
-  assert.equal(c.boot, '/b/boot-3ENUIJBD.js');
-  assert.equal(c.app, '/b/app-56NJKGMX.js');
-  assert.ok(c.core.includes('/b/c-577XDD6D.js'), 'core ต้องมี chunk หลักของ app');
+test('chunkChain reads the downloaded bundle chain', (t) => {
+  const dir = bundleDir();
+  if (!dir) return t.skip('ไม่มี bundle/: รัน node tools/fetch-bundle.mjs ก่อน');
+  const read = (p) => readFileSync(new URL(p.replace(/^\//, ''), dir), 'utf8');
+  const index = read('index.html');
+  const boot = LOC.chunkChain(index, '', '').boot;
+  assert.match(boot, /^\/b\/boot-[\w-]+\.js$/);
+  const app = LOC.chunkChain(index, read(boot), '').app;
+  assert.match(app, /^\/b\/app-[\w-]+\.js$/);
+  const c = LOC.chunkChain(index, read(boot), read(app));
+  assert.ok(c.core.length > 0, 'core ต้องไม่ว่าง');
+  for (const p of c.core) assert.ok(existsSync(new URL(p.slice(1), dir)), p + ' ต้องมีไฟล์');
+});
+
+test('core chunks of the downloaded bundle hold all four tables', (t) => {
+  const dir = bundleDir();
+  if (!dir) return t.skip('ไม่มี bundle/: รัน node tools/fetch-bundle.mjs ก่อน');
+  // assert ด้วย marker ข้อความเท่านั้น ห้าม import chunk เพราะจะรันเกมชุดที่สอง
+  const read = (p) => readFileSync(new URL(p.replace(/^\//, ''), dir), 'utf8');
+  const index = read('index.html');
+  const boot = LOC.chunkChain(index, '', '').boot;
+  const app = LOC.chunkChain(index, read(boot), '').app;
+  const all = LOC.chunkChain(index, read(boot), read(app)).core.map(read).join('\n');
+  for (const marker of ['id:"mortal"', 'id:"novice"', '#8c918e', 'woodSword']) {
+    assert.ok(all.includes(marker), 'ต้องเจอ ' + marker + ' ใน core chunk');
+  }
 });
 
 test('chunkChain returns no core for wiki entry', () => {
