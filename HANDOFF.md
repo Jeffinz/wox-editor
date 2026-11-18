@@ -2,6 +2,8 @@
 
 Written: 2026-11-18 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
 
+**ปล่อยแล้ว:** commit `bfc2796` บน `main` (`4dd4ecc..bfc2796`), raw URL เห็น `@version 3.4.3` แล้ว
+
 อ่าน `CLAUDE.md` ก่อน กติกาอยู่ในนั้น: ตอบภาษาไทยสั้น ๆ, รัน `node --check`, bump `@version` + `VERSION` พร้อมกัน, ปล่อยด้วย `tools/release.mjs`, **ห้ามแยก subagent** (§7)
 
 ## Goal
@@ -15,7 +17,7 @@ Written: 2026-11-18 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xia
 
 ## Where things stand
 
-- branch `fix/audit-v342` merge เข้า `main` แบบ ff แล้ว, worktree `.worktrees/audit-v342` ถูกลบแล้ว
+- branch `fix/audit-v342` merge เข้า `main` แบบ ff แล้ว, worktree และ branch ถูกลบแล้ว (branch เก่า `audit/2026-11-18` ลบแล้วตามที่นายท่านสั่ง)
 - ยังไม่ได้ทดสอบ v3.4.3 ในเกมจริง
 
 ## Changes made (v3.4.2 → v3.4.3)
