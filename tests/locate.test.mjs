@@ -107,7 +107,7 @@ test('tierIdx: ตัวเลขคงเดิม, สตริงตัวเ
   assert.equal(LOC.tierIdx('3'), 3);
   assert.equal(LOC.tierIdx(undefined), 0);
   assert.equal(LOC.tierIdx(null), 0);
-  assert.equal(LOC.tierIdx('legendary'), 4);
+  assert.equal(LOC.tierIdx('legendary'), 5);
   assert.equal(LOC.tierIdx('weird'), null);
 });
 

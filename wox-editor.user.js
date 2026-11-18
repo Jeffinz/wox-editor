@@ -88,12 +88,18 @@
     };
     // ลำดับระดับสตริงของไอเทม (ชื่อตรงกับ RAR_LBL); ย้ายจากฝั่ง DOM มาไว้ที่เดียวเพื่อให้เทสได้
     const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+    // ระดับชื่อ → ขั้นของเกม: จับคู่ด้วยสีของป้าย (RAR_LBL กับ TIER_LBL) ไม่ใช่ลำดับใน RAR_ORDER
+    // เทาคือสามัญ 0, เขียวคือขั้นปฐพี 2, ฟ้าคือขั้นฟ้า 3, ม่วงคือขั้นสวรรค์ 4, ทองคือขั้นเซียน 5 (ขั้นมนุษย์ไม่มีระดับชื่อคู่)
+    const RAR_TO_TIER = { common: 0, uncommon: 2, rare: 3, epic: 4, legendary: 5 };
+    // ชื่อระดับของไอเทม (pure): สตริงที่อยู่ใน RAR_ORDER เท่านั้น ไม่งั้น null
+    const rarKey = (tier) => (typeof tier === 'string' && RAR_ORDER.includes(tier) ? tier : null);
     // ลำดับชั้นของไอเทมสำหรับกรอง/เรียง (pure): ตัวเลขหรือสตริงตัวเลข → 0-5 (เหมือนเดิม), ไม่มีค่า → 0
-    // สตริงระดับ (เช่น "epic") → index 0-4 ของ RAR_ORDER
+    // สตริงระดับ (เช่น "epic") → ขั้นของเกมที่มีสีเดียวกันตาม RAR_TO_TIER
     // สตริงอื่นที่จับคู่ไม่ได้ → null: ต้องเห็นได้ทุกตัวกรองและอยู่ท้ายรายการ
     const tierIdx = (tier) => {
       const raw = tier ?? 0;
-      if (typeof raw === 'string' && RAR_ORDER.includes(raw)) return RAR_ORDER.indexOf(raw);
+      const rar = rarKey(raw);
+      if (rar) return RAR_TO_TIER[rar];
       const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
       return Number.isFinite(n) ? Math.min(5, n) : null;
     };
@@ -105,10 +111,16 @@
       if (x === null || y === null) return (x === null) - (y === null) || slot(a).localeCompare(slot(b));
       return y - x || slot(a).localeCompare(slot(b));
     };
-    // ไอเทมผ่านตัวกรองระดับไหม (pure): "all" ผ่านหมด, ระดับที่รู้ไม่ได้ผ่านทุกตัวกรอง (เหมือนของเดิม)
+    // ไอเทมผ่านตัวกรองระดับไหม (pure): "all" ผ่านหมด
+    // ไอเทมระดับชื่อ ("epic") ตรงกับตัวกรอง "r:<ชื่อ>" เท่านั้น; ไอเทมขั้นตัวเลขตรงกับตัวกรองขั้นของเกม
+    // ระดับที่รู้ไม่ได้ผ่านทุกตัวกรอง (เหมือนของเดิม)
     const tierMatches = (item, filter) => {
+      const f = String(filter ?? 'all');
+      if (f === 'all') return true;
+      const rar = rarKey(item?.tier);
+      if (rar) return f === 'r:' + rar;
       const k = tierIdx(item?.tier);
-      return filter === 'all' || k === null || String(k) === filter;
+      return k === null || String(k) === f;
     };
     // อ่านค่าตัวเลขจากช่องกรอก (pure): คืน null เมื่อว่างหรือไม่ใช่จำนวนจริง เพื่อไม่ให้เขียน 0 ทับค่าเดิม
     const numOr = (x) => {
@@ -521,8 +533,11 @@
     const evKey = (e) => { try { return SIM?.rarityFor?.(e) ?? 'common'; } catch { return 'common'; } };
     const evRar = (e) => RAR_LBL[evKey(e)] ?? RAR_LBL.common;
     // ลำดับชั้นของไอเทม: ใช้ LOC.tierIdx (null = จับคู่แถว TIERS ไม่ได้)
-    // ตัวเลือกระดับความหายากในช่องกรอง (ค่า "all" = ทุกระดับ)
-    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' + TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('');
+    // ตัวเลือกระดับในช่องกรองมีสองกลุ่ม เพราะไอเทม tier เป็นได้ทั้งตัวเลข (ขั้นของเกม 0-5) และชื่อ (RAR_LBL)
+    // ถ้ามีแต่กลุ่มตัวเลข ผู้ใช้จะกรองตามป้ายที่เห็นบนไอเทม ("[ตำนาน]") ไม่ได้
+    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' +
+      TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('') +
+      '<optgroup label="ความหายาก">' + RAR_ORDER.map((k) => `<option value="r:${k}">${RAR_LBL[k][0]}</option>`).join('') + '</optgroup>';
     $('hevr').innerHTML = '<option value="all">ทุกระดับ</option>' + RAR_ORDER.map((k) => `<option value="${k}">${RAR_LBL[k][0]}</option>`).join('');
     let itemList = [];
     const drawItems = () => {
