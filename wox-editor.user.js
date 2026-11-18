@@ -243,7 +243,7 @@
   if (typeof document === 'undefined') { module.exports = LOC; return; }
   const VERSION = '3.3.3'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
-  let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
+  let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
   // tables = ตารางที่อ่านได้สะสมข้ามรอบ (F2); chainCache = ชื่อ chunk ที่หาได้แล้ว ใช้ข้าม fetch สามไฟล์ตอน retry (R2)
   let tables = null, chainCache = null;
@@ -525,7 +525,6 @@
           <div data-pane="ev" hidden>
             <section>
               <h3>เรียกอีเว้นต์ใหญ่</h3>
-              <div class="field"><label for="hevg">สาย</label><select id="hevg"></select></div>
               <div class="field"><label for="hevr">ระดับความหายาก</label><select id="hevr"></select></div>
               <div class="field"><label for="hevq">ค้นหาชื่ออีเว้นต์</label><input id="hevq" type="search" autocomplete="off"></div>
               <select id="hevl" size="9" aria-label="ผลการค้นหาอีเว้นต์"></select>
@@ -670,37 +669,29 @@
       const e = EVENTS.find((x) => x.id === $('hevl').value);
       $('hevd').textContent = e ? (e.th?.text ?? '').slice(0, 200) : 'เลือกอีเว้นต์เพื่อดูรายละเอียด';
     };
-    const GROUPS = [['all', 'ทุกสาย'], ['major', 'ชีวิตทั่วไป'], ['people', 'ผู้คน / ความสัมพันธ์'], ['sect', 'สำนัก'], ['status', 'สถานะ / อาชีพ'],
-      ['story', 'เรื่องราวต่อเนื่อง'], ['trip', 'เดินทาง / ดันเจี้ยน'], ['arc', 'ฉากใหญ่ (arc)'], ['other', 'อื่นๆ']];
-    $('hevg').innerHTML = GROUPS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('');
-    const GROUP_OF = new Map();
-    // รวมอีเว้นต์ที่มีตัวเลือกทุกสายของเกม (เรื่องราวบางชุดโหลดทีหลัง จึงสร้างใหม่ทุกครั้งที่เปิดแท็บ)
+    // sim เก็บอีเว้นต์ทุกสายใน Map เดียว เกมแบบ bundle ไม่มีข้อมูลกลุ่มให้กรอง (สเปค §2)
+    // รวมอีเว้นต์ที่มีตัวเลือก (เรื่องราวบางชุดโหลดทีหลัง จึงสร้างใหม่ทุกครั้งที่เปิดแท็บ)
     const buildEvents = () => {
       if (!SIM?.allMajors) return;
-      GROUP_OF.clear();
-      try {
-        const a = SIM.eventsForAudit();
-        for (const g of ['major', 'people', 'sect', 'status', 'story', 'trip', 'arc']) for (const e of a[g] ?? []) if (e?.id && !GROUP_OF.has(e.id)) GROUP_OF.set(e.id, g);
-      } catch { /* ใช้กลุ่ม "อื่นๆ" */ }
       const seen = new Set();
-      EVENTS = [...SIM.allMajors(), ...(MJ?.LIFE_PATH ? [MJ.LIFE_PATH] : [])].filter((e) => e && e.id && e.options?.length && !seen.has(e.id) && seen.add(e.id));
+      EVENTS = SIM.allMajors().filter((e) => e && e.id && e.options?.length && !seen.has(e.id) && seen.add(e.id));
     };
     const drawEvents = () => {
       buildEvents();
-      // เกมแบบ bundle ยังไม่มีแหล่งข้อมูลอีเว้นต์: ห้ามลงว่า "ไม่พบ" เพราะผู้ใช้จะคิดว่าค้นผิด
-      if (!SIM && !EVENTS.length) { $('hevn').textContent = LOC.EV_UNSUPPORTED; return; }
-      const q = norm($('hevq').value).trim(), g = $('hevg').value, r = $('hevr').value;
+      // ยังไม่มี sim: ห้ามลงว่า "ไม่พบ" เพราะผู้ใช้จะคิดว่าค้นผิด
+      if (!SIM && !EVENTS.length) { $('hevn').textContent = LOC.EV_UNSUPPORTED + (simError ? ' — ' + simError : ''); return; }
+      const q = norm($('hevq').value).trim(), r = $('hevr').value;
       const key = new Map(EVENTS.map((e) => [e.id, evKey(e)]));
       // เรียงหายากก่อน (ตำนานไปธรรมดา) แล้วตามชื่อ
       const hit = EVENTS
-        .filter((e) => (g === 'all' || (GROUP_OF.get(e.id) ?? 'other') === g) && (r === 'all' || key.get(e.id) === r) && (!q || norm(evTitle(e)).includes(q) || norm(e.en?.title).includes(q) || norm(e.id).includes(q)))
+        .filter((e) => (r === 'all' || key.get(e.id) === r) && (!q || norm(evTitle(e)).includes(q) || norm(e.en?.title).includes(q) || norm(e.id).includes(q)))
         .sort((a, b) => RAR_ORDER.indexOf(key.get(b.id)) - RAR_ORDER.indexOf(key.get(a.id)) || evTitle(a).localeCompare(evTitle(b), 'th'));
       $('hevl').innerHTML = hit.slice(0, 300).map((e) => `<option value="${esc(e.id)}">[${esc(evRar(e)[0])}] ${esc(evTitle(e))}</option>`).join('');
       if ($('hevl').options.length) $('hevl').selectedIndex = 0;
       $('hevn').textContent = hit.length ? `พบ ${hit.length} อีเว้นต์` : 'ไม่พบอีเว้นต์ที่ตรงกับคำค้น';
       showEv();
     };
-    $('hevq').oninput = drawEvents; $('hevg').onchange = drawEvents; $('hevr').onchange = drawEvents;
+    $('hevq').oninput = drawEvents; $('hevr').onchange = drawEvents;
     $('hevl').onchange = showEv;
 
     // ---------- โหลดตารางข้อมูลจาก chunk ของเกม (เกมแบบ bundle ไม่มี /src/*.js แล้ว) ----------
@@ -927,11 +918,11 @@
         (t.bag ??= {})[id] = (t.bag[id] ?? 0) + n;
         msg = `เพิ่ม ${name(id)} ×${n} แล้ว`;
       } else if (b.id === 'hevb') {
-        if (!SIM && !EVENTS.length) return toast(LOC.EV_UNSUPPORTED, true);
-        const ev = SIM?.majorEvent($('hevl').value) ?? EVENTS.find((x) => x.id === $('hevl').value);
+        if (!SIM) return toast(LOC.EV_UNSUPPORTED + (simError ? ' — ' + simError : ''), true);
+        const ev = SIM.majorEvent($('hevl').value);
         if (!ev) return toast('เลือกอีเว้นต์จากรายการก่อน', true);
         if (t.pending && !confirm('ตอนนี้มีอีเว้นต์ค้างอยู่ จะเขียนทับไหม')) return;
-        t.pending = { kind: 'major', id: ev.id, options: ev.options.map((o) => o.id), rarity: SIM?.rarityFor ? SIM.rarityFor(ev) : undefined };
+        t.pending = { kind: 'major', id: ev.id, options: SIM.openOptions(t, ev), rarity: SIM.rarityFor(ev) };
         msg = `เรียก "${evTitle(ev)}" แล้ว ทำอะไรในเกมสักอย่างเพื่อให้การ์ดขึ้น`;
       } else return;
       fresh(true);
