@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.4.0
+// @version      3.4.1
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -241,7 +241,7 @@
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.4.0'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.4.1'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
@@ -260,7 +260,8 @@
   };
   const installSim = () => {
     // เฉพาะหน้าเกม '/' และเฉพาะตอนที่ parser ยังไม่เริ่ม: import map ที่มาสายถูกเมิน
-    if (location.pathname !== '/') return;
+    // หน้าอื่น (เช่น wiki) ต้องไม่รอ sim 60 วินาที: บอกเหตุผลไปเลยแล้วให้ simReady จบ
+    if (location.pathname !== '/') { window.__woxSimError = 'หน้านี้ไม่ใช่หน้าเกม จึงไม่มี sim'; return; }
     if (document.readyState !== 'loading') { window.__woxSimError = 'ติดตั้ง import map ไม่ทัน (หน้านี้โหลดไปแล้ว)'; return; }
     if (document.querySelector('script[type="module"]')) { window.__woxSimError = 'ติดตั้ง import map ไม่ทัน (boot เริ่มโหลดแล้ว)'; return; }
     try {
@@ -1086,7 +1087,7 @@
     const statKeys = STATS.map(([k]) => k);
     // สถานะ sim สำหรับแผงตรวจระบบ: ok เมื่อมี SIM, error เมื่อรู้เหตุผล, ไม่งั้นยังรอ
     const simInfo = () => SIM
-      ? { state: 'ok', funcs: 6, events: SIM.allMajors().length }
+      ? { state: 'ok', funcs: LOC.SIM_KEYS.length, events: SIM.allMajors().length }
       : { state: simError ? 'error' : 'waiting', reason: simError };
     const runHealth = async () => {
       // ตรวจ state ก่อน เพราะทำได้ทันทีโดยไม่ต้องรอ chunk
