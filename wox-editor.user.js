@@ -143,7 +143,38 @@
       for (const k of ['realms', 'martialRanks', 'tiers', 'items']) out[k] = next?.[k] ?? prev?.[k] ?? null;
       return out;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables };
+    // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore() (ตรวจระบบกับตรวจอัปเดตอ่านชุดเดียวกัน)
+    const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
+    // ฟิลด์ของ state ที่แผงแก้ได้: กลุ่มแรกต้องมี กลุ่มหลังมีหรือไม่มีก็ได้ตามเส้นทางของตัวละคร
+    const STATE_REQUIRED = ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi'];
+    const STATE_OPTIONAL = ['martial', 'pending'];
+    const baseName = (p) => String(p ?? '').slice(String(p ?? '').lastIndexOf('/') + 1);
+    // บรรทัดตารางในแผงตรวจระบบ (pure, ห้าม throw): ไม่รวมบรรทัด BUILD ซึ่งผู้เรียกสร้างเอง
+    // ข้อความ ☑ ใช้เฉพาะเมื่อรู้แน่แล้วเท่านั้น: chunk โหลดไม่ครบต้องเป็น "–" ไม่ใช่ "✖"
+    const tableLines = (c) => {
+      if (c?.reason === 'no-state') return ['– รอข้อมูลเกมเกิน 2 นาที เล่นในเกมสัก 1 เดือนแล้วกดตรวจอีกครั้ง'];
+      if (!c || !Array.isArray(c.core) || c.core.length === 0) return ['– ยังไม่ได้อ่าน chunk หลัก'];
+      const loaded = coreLoaded(c);
+      return TABLES.map(([label, key]) => {
+        if (c[key]) return `✔ ${label} (${c.where?.[key] || 'chunk หลัก'})`;
+        if (loaded) return `✖ ${label}: หาไม่เจอใน chunk หลัก`;
+        const failed = (c.failed ?? []).map(baseName).join(', ');
+        return `– ${label}: ยังไม่แน่ใจ (chunk ${failed} โหลดไม่ได้)`;
+      });
+    };
+    // บรรทัด state ในแผงตรวจระบบ (pure, ห้าม throw): ฟิลด์ไม่บังคับมีหรือไม่มีก็ไม่ใช่ error
+    const stateLines = (t, statKeys) => {
+      if (!t) return ['– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)'];
+      const out = [];
+      const miss = STATE_REQUIRED.filter((k) => t[k] === undefined);
+      out.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
+      const sm = (statKeys ?? []).filter((k) => t.stats?.[k] === undefined);
+      if (sm.length) out.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
+      out.push(t.martial ? '✔ martial' : '– martial: ไม่มี (ตัวละครไม่ได้อยู่สายยุทธ์)');
+      out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
+      return out;
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -542,8 +573,11 @@
     const loadCore = async () => {
       // where = ชื่อไฟล์ chunk ที่เจอตารางนั้น (แผงตรวจระบบใช้อ้างอิง); boot/app/core ใช้เก็บฐานใน woxed.manifest
       // imported = import() chunk หลักสำเร็จครบทุกตัวหรือยัง; ตรวจระบบ/ตรวจอัปเดตอ่านค่านี้ก่อนลงว่าตารางหาย
+      // failed = path ของ chunk ที่ import ไม่ได้ (แผงตรวจระบบใช้บอกว่า "ยังไม่แน่ใจ" ไม่ใช่ "หาไม่เจอ")
+      // reason = 'no-state' เมื่อรอ state ครบ 2 นาทีแล้วยังไม่ได้ (แผงบอกผู้ใช้ให้เล่นต่อ)
       const out = {
-        build: '', boot: '', app: null, core: [], imported: false, where: { realms: '', martialRanks: '', tiers: '', items: '' },
+        build: '', boot: '', app: null, core: [], imported: false, failed: [], reason: '',
+        where: { realms: '', martialRanks: '', tiers: '', items: '' },
         realms: null, martialRanks: null, tiers: null, items: null,
       };
       if (isWiki()) return out;
@@ -555,7 +589,7 @@
       try {
         out.build = (await text('/src/build.js')).match(/BUILD\s*=\s*"([^"]+)"/)?.[1] ?? '';
       } catch { /* ไม่มี BUILD ก็ไม่เป็นไร */ }
-      if (!(await waitState())) return out;
+      if (!(await waitState())) { out.reason = 'no-state'; return out; }
       try {
         // ชื่อ chunk ไม่เปลี่ยนตลอดอายุหน้า จึงจำ chain ที่หาได้ครบแล้วไว้ กัน fetch /, boot, app ซ้ำตอนกด "ตรวจอีกครั้ง"
         // import chunk ซ้ำไม่เสียเครือข่าย เพราะเบราว์เซอร์ใช้ module cache อยู่แล้ว
@@ -580,7 +614,7 @@
             // path เต็มมาจาก boot file แล้ว จึงใช้ path นั้นสร้าง URL เอง ไม่ hardcode โฟลเดอร์ /b/
             // URL ต้องเหมือนที่เกมใช้ทุกตัวอักษรเพื่อได้ module instance เดิม (ไม่ใส่ query กันแคช)
             mods.push({ path: p, ns: await import(LOC.chunkUrl(p, location.origin)) });
-          } catch { out.imported = false; /* chunk หนึ่งโหลดไม่ได้ ต้องไม่ทำให้เกมหยุด */ }
+          } catch { out.imported = false; out.failed.push(p); /* chunk หนึ่งโหลดไม่ได้ ต้องไม่ทำให้เกมหยุด */ }
         }
         // คืนทั้งค่าและชื่อไฟล์ chunk ที่เจอ เพื่อให้แผงตรวจระบบบอกได้ว่าตารางมาจากไฟล์ไหน
         const find = (test) => {
@@ -876,19 +910,12 @@
     aiObs.observe(document.body, { childList: true, subtree: true });
 
     // ---------- ตรวจระบบหลังเกมอัปเดต: ตารางจาก chunk หลัก + ฟิลด์ของ state ----------
-    // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore()
-    const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
-    const STATE_KEYS = ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi'];
+    // ตารางและฟิลด์ state อยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
+    const TABLES = LOC.TABLES;
+    const statKeys = STATS.map(([k]) => k);
     const runHealth = async () => {
       // ตรวจ state ก่อน เพราะทำได้ทันทีโดยไม่ต้องรอ chunk
-      const state = [];
-      if (!t) state.push('– ยังไม่มีข้อมูลตัวละคร (เล่นในเกม 1 เดือนก่อน แล้วกดตรวจอีกครั้ง)');
-      else {
-        const miss = STATE_KEYS.filter((k) => t[k] === undefined);
-        state.push(miss.length ? `✖ state ไม่มีฟิลด์: ${miss.join(', ')}` : '✔ state ครบ');
-        const sm = STATS.map(([k]) => k).filter((k) => t.stats?.[k] === undefined);
-        if (sm.length) state.push(`✖ stats ไม่มีค่า: ${sm.join(', ')}`);
-      }
+      const state = LOC.stateLines(t, statKeys);
       const head = [`สคริปต์ v${VERSION}`];
       const show = (lines) => { $('hchk').textContent = lines.join('\n'); console.info('[WoX Editor]\n' + lines.join('\n')); };
       if (isWiki()) { show([...head, '– หน้า wiki ไม่มี chunk หลักของเกม จึงตรวจตารางไม่ได้', ...state]); return; }
@@ -897,13 +924,8 @@
       const c = await getCore().catch(() => null);
       const lines = [...head];
       lines.push(c?.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
-      // อ่าน BUILD ได้แต่ chunk ไม่มา (state ยังไม่มา / index-boot-app อ่านไม่ได้) = ยังไม่ได้ตรวจจริง ห้ามลงว่า ✖ ทุกตาราง
-      if (!LOC.coreLoaded(c)) lines.push('– ยังไม่ได้อ่าน chunk หลัก');
-      else {
-        for (const [label, key] of TABLES) {
-          lines.push(c[key] ? `✔ ${label} (${c.where?.[key] || 'chunk หลัก'})` : `✖ ${label}: หาไม่เจอใน chunk หลัก`);
-        }
-      }
+      // ตารางที่ยังไม่รู้ (chunk โหลดไม่ครบ / state ยังไม่มา) ต้องขึ้น "–" ไม่ใช่ "✖" (LOC.tableLines ตัดสินให้)
+      lines.push(...LOC.tableLines(c));
       lines.push('– อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle (ดู Task 5)');
       show([...lines, ...state]);
     };
