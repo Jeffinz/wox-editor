@@ -174,3 +174,38 @@ e.pending={kind:"major",id:…,options:wr(e,o),rarity:cr(o),npc:r.id}
 - ข้อ 3 ผ่าน: `t.log` 77 รายการ, entry `kind:"major"` 11/11 มี `rarity`
 - ข้อ 4 ผ่าน: `window.wox` มีจริงด้วย `?promo` คีย์ชุดเดียวกับ §1 ไม่มี sim
 - เกมไม่รับ `click()` ที่มาเร็วเกินไปหลังการ์ดขึ้น (ต้องรอ ~1.5 วินาที) และบางตัวเลือกเปิดหน้าต่างยืนยันในการ์ด (เปลี่ยนเส้นทางชีวิต)
+
+## 7. Spike: แก้ `app-*.js` ก่อนเกมรันด้วย import map (2026-11-18, build `mwll6s9j`)
+
+นายท่านถามว่าทำไมดึง `app-*.js` ไม่ได้ จึงลองทางที่ §3 ไม่ได้พิจารณา: ไม่ import app ตัวที่สอง แต่**แทนที่** app ตัวเดียวที่เกมโหลดด้วยตัวที่เติมบรรทัดเปิด sim
+
+วิธี (จำลองใน Chrome ทดลอง: เปิด `/b/c-5L324H4G.js`, `history.replaceState` เป็น `/`, `document.write` index.html ที่แทรก import map ก่อน `<script type="module" src="b/boot-…">`):
+
+1. import map ชี้ URL เต็มของ `app-*.js` ไปที่ shim (blob)
+2. shim `fetch` ข้อความ app → เขียน specifier สัมพัทธ์ `/((?:\bfrom|\bimport)\s*\(?\s*)"\.\//g` เป็น URL เต็มของ `/b/` (5 จุด: มีทั้ง `from"./`, `import"./` และ `import("./`) → ต่อท้าย `;window.__woxSim={majorTexts:Mg,majorEvent:Br,events:rh,rarityFor:br,openOptions:Ar,statOdds:qPe};` → `import()` blob
+3. chunk ที่ app import ใช้ URL เต็มเดียวกับที่ boot/chunk อื่นใช้ จึงเป็นโมดูลตัวเดิม (ไม่รันซ้ำ)
+
+ชื่อหาจากรูปร่างของโค้ด (สคริปต์ทิ้งได้ใน scratchpad ตอน spike):
+
+| สิ่งที่ต้องการ | รูปร่าง | ชื่อใน 3 build (`mwlj4t86`, `mwlkbpdo`, `mwll6s9j`) |
+|---|---|---|
+| majorTexts / majorEvent | `function X(e,t=Y(e.pending?.id),n=e.pending?.npc)` | `Mg` / `Br` |
+| ตารางอีเว้นต์ (Map) | `Y=e=>Z.get(e)` | `rh` |
+| rarityFor | `X=e=>e.story?…(….get(e.story)):…(e)` | `br` |
+| openOptions | `X=(e,t)=>{let n=t.options.filter(` | `Ar` |
+| statOdds | ใน `T("small","odds","")…${M(M2(X(e,t,n,o)))}` | `qPe` |
+
+แต่ละชื่อประกาศครั้งเดียวในไฟล์ ชื่อเหมือนกันทั้ง 3 build (esbuild ย่อชื่อแบบคงที่ถ้าโค้ดไม่เปลี่ยนมาก) แต่ห้ามพึ่งชื่อ ต้องหาจากรูปร่างทุกครั้ง
+
+ผล:
+
+- เกมโหลดและเล่นได้ปกติ (ล็อบบี้ → โหลดเซฟ → cutscene → การ์ด) shim ใช้ ~1.7 วินาที (fetch + แก้ + import 4.6 MB)
+- `__woxSim.events` เป็น `Map` 16,619 อีเว้นต์; `majorTexts(t)` คืนอีเว้นต์พร้อม `rarity`; ตัวเลือกมี `chance`, `ok/fail.fx`, `act` ครบ; `statOdds(t, chance, ev, opt)` คืนความน่าจะเป็น (การ์ด `bullied` ปุ่ม fight = 1 ตรงกับ "แน่นอน")
+- เรียกอีเว้นต์ได้: ตั้ง `t.pending = {kind:'major', id, options: openOptions(t, ev), rarity: rarityFor(ev)}` บน state ตัวจริง (object ที่ hook `JSON.stringify` ได้คือตัวเดียวกับที่เกมใช้) → เกมเล่น cutscene แล้วขึ้นการ์ด "ถ้ำหลังน้ำตก" ปุ่มครบ
+- ถ้า specifier เขียนไม่ครบ app throw → boot ถือว่า build เก่าแล้ว **reload หน้าเอง** (เจอจริงรอบแรก) ต้องมี fallback
+
+ยังไม่ได้พิสูจน์:
+
+- ทำใน Tampermonkey จริง: import map ต้องอยู่ก่อน boot เริ่ม resolve `import("./app-…")` แต่ชื่อ app รู้ได้หลังอ่าน boot เท่านั้น ทางเลือก: (a) sync XHR `/` + boot ตอน `document-start` (แน่นอน แต่ block ~2 request เล็ก) (b) fetch แบบ async แล้วเพิ่ม import map ทีหลัง (Chrome รองรับ import map หลายชุดแบบ dynamic แต่แข่งเวลากับ boot)
+- fallback เมื่อหาชื่อไม่เจอหรือ import blob พัง: import `app-….js?woxed=raw` (URL ต่างจากที่ map ไว้ จึงได้ app ตัวจริงไม่แก้)
+- ขัด Global Constraint ของแผน bundle-port ข้อ "ห้าม import `app-*.js`" — ต้องให้นายท่านตัดสินว่าจะยกเลิกข้อนี้ (เหตุผลเดิม "รันเกมซ้ำ" ไม่เกิด เพราะเราแทนที่ ไม่ได้โหลดเพิ่ม)
