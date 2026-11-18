@@ -80,6 +80,19 @@ test('simNames ตอบ null เมื่อชื่อใดชื่อห�
   assert.equal(LOC.simNames(fn + fn), null);
 });
 
+test('simNames ไม่นับชื่อที่เป็นท้ายคำอื่นเป็นที่ประกาศ (sh ใน xe.fish=)', () => {
+  // build mwlnu1rf: events ชื่อ sh แล้ว xe.fish=null ถูกนับเป็นที่ประกาศที่สอง ทำให้ sim หายทั้งชุด
+  const src = 'function Tg(e,t=jr(e.pending?.id),n=e.pending?.npc){}' +
+    ';jr=e=>sh.get(e);var sh=new Map;' +
+    ';yr=e=>e.story?P(C.get(e.story)):Q(e);' +
+    ',Er=(e,t)=>{let n=t.options.filter(x)};' +
+    'T("small","odds","")+`${A(B(_Pe(e,t,n,o)))}`;function _Pe(e,t,n=null,o){}' +
+    ';xe.fish=null;Z.fish={};';
+  assert.deepEqual(LOC.simNames(src), {
+    majorTexts: 'Tg', majorEvent: 'jr', events: 'sh', rarityFor: 'yr', openOptions: 'Er', statOdds: '_Pe',
+  });
+});
+
 test('simNames ทำงานได้เมื่อถูกแปลงเป็นซอร์ส (เส้นทางจริงของ shim)', (t) => {
   // shim ฝังฟังก์ชันด้วย Function.prototype.toString แล้วรันใน module
   // เทสนี้พิสูจน์ว่าฟังก์ชันไม่พึ่งตัวแปรนอกฟังก์ชัน

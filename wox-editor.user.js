@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.4.1
+// @version      3.4.2
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -214,7 +214,8 @@
       for (const k of keys) {
         if (!out[k]) return null;
         // ต้องมีที่ประกาศเดียว: function X( หรือ X=... (ตัด ==/===/=> ที่ไม่ใช่การประกาศออก)
-        const defs = [...s.matchAll(new RegExp('(?:function\\s+' + esc(out[k]) + '\\s*\\(|' + esc(out[k]) + '\\s*=[^=>])', 'g'))];
+        // X ต้องไม่ต่อท้ายตัวอักษร/$/จุด: ชื่อสั้นอย่าง sh เป็นท้ายของ xe.fish= ได้
+        const defs = [...s.matchAll(new RegExp('(?:function\\s+' + esc(out[k]) + '\\s*\\(|(?<![\\w$.])' + esc(out[k]) + '\\s*=[^=>])', 'g'))];
         if (defs.length !== 1) return null;
       }
       return out;
@@ -241,7 +242,7 @@
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.4.1'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.4.2'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
