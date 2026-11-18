@@ -1,83 +1,81 @@
-# Handoff: audit v3.4.5 เสร็จ — ยังไม่ได้เลือกว่าจะแก้ finding ตัวไหน
+# Handoff: v3.4.6 ปล่อยแล้ว — รอตรวจในเกม
 
-Written: 2026-11-18 14:18 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
+Written: 2026-11-18 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
 
-อ่าน `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\CLAUDE.md` ก่อน ไฟล์นั้นคือกติกาของโปรเจกต์: ตอบภาษาไทยสั้น ๆ, เรียกผู้ใช้ว่า "นายท่านชาโดว์", รัน `node --check` ก่อนส่งงาน, bump `@version` + `const VERSION` พร้อมกันแล้วปล่อยด้วย `tools/release.mjs`, **ห้ามแยก subagent** (§7), นายท่านต้องอัปเดตสคริปต์ใน Tampermonkey เอง
+อ่าน `CLAUDE.md` ก่อน ไฟล์นั้นคือกติกาของโปรเจกต์: ตอบภาษาไทยสั้น ๆ, เรียกผู้ใช้ว่า "นายท่านชาโดว์", รัน `node --check` ก่อนส่งงาน, bump `@version` + `const VERSION` พร้อมกันแล้วปล่อยด้วย `tools/release.mjs`, **ห้ามแยก subagent** (§7), นายท่านต้องอัปเดตสคริปต์ใน Tampermonkey เอง
 
 ## Goal
 
-userscript Tampermonkey ไฟล์เดียว (`wox-editor.user.js`) สำหรับแก้สถานะเกม Way of Xian โหมดเล่นคนเดียว พร้อมแท็บอีเว้นต์และแท็บช่วยเลือกที่ให้คะแนนตัวเลือกบนการ์ดแล้วกดให้อัตโนมัติ ฟีเจอร์ที่ขอไว้ทำครบและตรวจในเกมแล้ว รอบนี้เป็นงาน **audit** (อ่านโค้ด หา finding เขียน note) ไม่แก้อะไร "เสร็จ" ของรอบถัดไป = เลือก finding แล้วปิดให้จบพร้อมเทสและ release
+userscript Tampermonkey ไฟล์เดียว (`wox-editor.user.js`) แก้สถานะเกม Way of Xian โหมดเล่นคนเดียว พร้อมแท็บอีเว้นต์และแท็บช่วยเลือกที่ให้คะแนนตัวเลือกบนการ์ดแล้วกดให้อัตโนมัติ รอบนี้คือการ **กวาด finding ของ audit v3.4.5 ตามลำดับที่ note เสนอ** (นายท่านเลือก "กวาดทั้งรอบ") ไม่ใช่การ audit ใหม่
 
 ## Where things stand
 
-v3.4.5 อยู่บน `main` และใช้งานได้ audit รอบใหม่ของ v3.4.5 เขียนเสร็จที่ `docs\superpowers\notes\2026-11-18-audit-v345.md` (ยังไม่ commit) ยังไม่ได้แตะโค้ดสคริปต์เลย tree สะอาดยกเว้น note ไฟล์ใหม่ 1 ไฟล์ งานที่ยังไม่เริ่มคือการแก้ finding: N1-N4 (ของใหม่) และ C3, C4, C7-C14, S1, T3, T5 (ค้างจาก audit v3.4.2)
+v3.4.6 อยู่บน `main` @ `ec84b3f` push ขึ้น origin แล้ว tree สะอาด งานที่ปิดในรอบนี้: N1, N2, N3, N4, C3, C4, C7, C8, C9, T3, T5 **ยังไม่ได้ตรวจในเกม** (ขั้นถัดไปของนายท่าน) finding ที่เหลือยังเปิดและคณะ audit แนะนำว่าไม่ต้องแก้: C10-C14, S1, T4, T6
 
 ## Verified facts
 
-- ตรวจซ้ำแล้วใน session 14:18: `git diff --stat a4974fb -- wox-editor.user.js tests tools` ว่าง (โค้ดไม่เปลี่ยนหลัง audit), เทส 72/72 skipped 0, build สดยังเป็น `mwlq36t8`, บรรทัดที่อ้างของ N1/N2/C3/C4 ยังตรง
-- `main` @ `a4974fb` (`git log --oneline -1`), `git status --porcelain` เหลือแค่ `?? docs/superpowers/notes/2026-11-18-audit-v345.md`
 - `node --check wox-editor.user.js` ผ่าน
-- `node --test "tests/**/*.test.mjs"` → `# tests 72`, `# pass 72`, `# fail 0`, `# skipped 0`
-- `node --test` แบบไม่ใส่ path ได้ `tests 73` เพราะ Node เก็บ `tools/test-summary.mjs` เข้าไปรันด้วย (glob `**/test-*`) — ไม่ใช่เทสจริง จำนวนที่นับคือ 72
-- build ที่เกมเสิร์ฟ: `curl -s https://way-of-xian.wox-game.workers.dev/src/build.js` → `export const BUILD = "mwlq36t8";` และ `bundle\mwlq36t8\` ในเครื่องคือ build เดียวกัน จึงเป็นการรันเทสกับ build สด
-- `wox-editor.user.js` ยาว 1192 บรรทัด (`wc -l`)
-- `git branch -a` มีแต่ `main`; ไม่มี worktree ค้าง
-- finding ที่ยืนยันในโค้ดปัจจุบัน (เลขบรรทัดของ v3.4.5): `dirty` ตั้งที่ `:888` และเป็น guard ที่ `:892` โดยไม่มีทางถูกล้างนอกจาก `fresh(true)` ที่ `:853`/`:992`; `simReady.then(() => { drawEvents(); aiScan(); })` ที่ `:882` ไม่มี try/catch; ปุ่มเรียกอีเว้นต์ `:984-990` เรียก `SIM.openOptions`/`SIM.rarityFor` ไม่มี try; timer กดอัตโนมัติ `:1112-1120` ไม่ clear เมื่อ `best` เป็น null
-- `pending: {}` ผ่าน `LOC.stateLines` ได้บรรทัด `✔ pending: undefined undefined` (รันด้วย `node -e` แล้ว)
-- `LOC.tierIdx(-1)` คืน `-1`, `LOC.tierIdx('EPIC')` คืน `null` (ค่าตัวพิมพ์ใหญ่ไม่ตรงกับ `RAR_ORDER`)
+- `node --test "tests/**/*.test.mjs"` → `# tests 77`, `# pass 77`, `# fail 0`, `# skipped 0` (ก่อนรอบนี้ 72; เพิ่ม 5 ตัว: `fieldKey` 2, `stateLines` 2, `simNames/simPatch` 1)
+- `node tools/release.mjs --dry-run` ผ่านก่อนปล่อยจริง และ `git log --oneline -1` = `ec84b3f`
+- build ที่เกมเสิร์ฟตอนตรวจรอบนี้คือ `mwlq36t8` (ตรงกับ `bundle/mwlq36t8/`) — เทส bundle จึงรันกับ build สด
+- `wox-editor.user.js` ยาว 1251 บรรทัด (`wc -l`) หลังแก้
+- commit ของ release **ไม่มี** trailer `Co-Authored-By` เพราะ `tools/release.mjs` ใช้แค่ argument แรกเป็นข้อความ commit — ต้องส่งเป็นสตริงเดียวที่มีขึ้นบรรทัดใหม่ ไม่ใช่ `-m` ตัวที่สอง
+
+## สิ่งที่เปลี่ยน (map กลับไปที่ note)
+
+- N1 — `LOC.fieldKey` ใหม่ (`hm`/`h_*`/`s_*`/`b:<ไอเทม>`), `dirty` เป็น `Set`, `fresh()` ใช้ `fill()` ข้ามเฉพาะช่องค้าง + ไม่สร้างแถวกระเป๋าใหม่เมื่อมีช่องกระเป๋าค้าง (`bagLocked`), ปุ่มบันทึกล้างเฉพาะคีย์ที่เขียนจริง (`saved`), `fresh(true)` ไม่ล้าง `dirty` แล้ว
+- N2 — `canClick` ตัวเดียวตัดสิน แล้ว `if (!canClick) { clearTimeout(aiTimer); aiPend = null; }`
+- N3 — `OPTIONAL_TEXT.pending` ตรวจ `{kind, id}` และขึ้น `– pending: รูปร่างไม่ตรง`
+- N4 — `rarDot` ผ่าน `esc`
+- C3 — `simReady.then` มี try/catch สองก้อน (drawEvents / aiScan)
+- C4 — ปุ่ม `#hevb` ครอบ try/catch + toast
+- C7/T5 — `stateLines` วนจาก `LOC.STATE_OPTIONAL`, เทสกันหลุด
+- C8 — `EV_UNSUPPORTED` = `'อีเว้นต์/ช่วยเลือก: sim ของเกมยังใช้ไม่ได้'` (เทส `tests/core.test.mjs` อัปเดตตาม)
+- C9/T3 — `simPatch` ประกาศ `const keys` ในตัวเอง, เทส `tests/sim.test.mjs` เทียบทั้ง `simNames`/`simPatch` กับ `SIM_KEYS`
 
 ## Guesses, not yet proven
 
-- สาเหตุที่แผงค้าง: สมมติฐานว่า N1 (`dirty` ค้าง) ทำให้ `fresh()` หยุดทุกรอบ น่าจะเป็นอาการที่ผู้ใช้จะเจอจริงเมื่อพิมพ์ค้างแล้วไม่กดบันทึก — ยังไม่มีรายงานจากนายท่าน สิ่งที่จะพิสูจน์: เปิดเกม พิมพ์เลขในช่องเงิน ไม่กดบันทึก คลิกเข้าเกม แล้วดูว่าเงินในแผงยังเปลี่ยนตามเกมไหม
-- N2 ต้องมีเงื่อนไขแคบ (เปลี่ยน preset/`ai_delay` ในจังหวะที่คะแนนออกมาเท่ากันภายใน `cfg.delay`) จึงยังไม่มีหลักฐานว่าเกิดในเกมจริง — พิสูจน์ได้ด้วยเทสหน่วยถ้าย้ายประตูตัดสินเข้า `LOC`
+- N1: สมมติฐานว่า `dirty` ค้างคือสาเหตุที่แผงหยุดรีเฟรช ยังไม่มีรายงานจากนายท่านตรง ๆ สิ่งที่พิสูจน์: พิมพ์เลขในช่องเงิน ไม่กดบันทึก คลิกเข้าเกม แล้วดูว่าเงินในแผงยังเปลี่ยนตามเกมไหม (ต้องเปลี่ยน) และค่าที่พิมพ์ยังอยู่
+- N2: ต้องมีเงื่อนไขแคบ (เปลี่ยน preset/`ai_delay` ในจังหวะที่คะแนนออกมาเท่ากัน) — เทสหน่วยยังไม่มี เพราะประตูอยู่ฝั่ง DOM ทั้งก้อน (T6)
 
 ## Ruled out and wrong turns
 
-- ห้ามใช้ `document.write` เขียน import map (เคยทำให้หน้าเกมจอดำ) — ต้องแทรก `<script type="importmap">` เป็น DOM node ที่ `document-start`
+- ห้ามใช้ `document.write` เขียน import map (เคยทำให้หน้าเกมจอดำ)
 - ห้ามแทรก DOM เข้าไปในปุ่มของเกม (ป้ายคะแนน) — เคยทำให้ observer สแกนซ้ำทุกเฟรม เกมกระตุก คลิกหาย
-- `fresh()` ห้ามกลับไปใช้ `root.activeElement` ตัดสินว่าจะข้ามรอบไหม — เคยทำให้ค่าที่พิมพ์ถูกทับ และ focus ค้างที่ช่องค้นหาทำให้แผงหยุดรีเฟรช ใช้ `dirty` + `LOC.isStateField` แทน (แต่ `dirty` แบบ boolean ที่ใช้อยู่ก็มีปัญหา N1 — ต้องแก้ให้ละเอียดขึ้น ไม่ใช่ถอยกลับไปใช้ activeElement)
-- ให้ `act` น้ำหนักบวกไม่ได้: `act` เป็นเนมสเปซเปิด (`{rel:10}`, `{kill:!0}`, `{marry:...}`, `{sectHere:3}`, `{shadowWound:32,shadowRob:!0}`, `{deathChance:...}`) ไม่มีตัวประเมินกลางให้ดูเครื่องหมาย จึงให้ 0 และหัก 200 เฉพาะคีย์เข้า `/die|death|kill|dead|perish/i`
-- อย่าแก้ประตูกดอัตโนมัติให้ตัด `scored.length === rows.length` ออก: นายท่านสั่งชัด (2026-11-18) ว่าเคสที่ตัวเลือกหนึ่งประเมินได้ อีกตัว blind **สคริปต์ห้ามกดอัตโนมัติ** ให้ผู้เล่นกดเอง (ฉบับก่อนเขียนว่า "ให้กดเองได้" ความหมายเดียวกัน: "กดเอง" = ผู้เล่นกด)
-- อเมนด์ commit ที่ปล่อยแล้วไม่ได้ เพราะ ruleset `protect-main` กัน force-push — commit message ของ release ส่งหลายบรรทัดผ่านอาร์กิวเมนต์ `tools/release.mjs "..."` เพื่อใส่ `Co-Authored-By`
-- อย่าอ้างจำนวนเทส 72 ว่าเป็น "จำนวนบรรทัด `ok`": `node --test` เปล่า ๆ ได้ 73 เพราะรัน `tools/test-summary.mjs` เป็นไฟล์เทสด้วย
+- `fresh()` ห้ามกลับไปใช้ `root.activeElement` และห้ามกลับไป `dirty` แบบ boolean ตัวเดียว
+- อย่าแก้ประตูกดอัตโนมัติให้ตัด `scored.length === rows.length` ออก: นายท่านสั่งชัดว่าตัวเลือกที่มี blind ปน **สคริปต์ห้ามกดอัตโนมัติ**
+- ให้ `act` น้ำหนักบวกไม่ได้ (`act` เป็นเนมสเปซเปิด) — 0 ปกติ, −200 เมื่อคีย์เข้า `/die|death|kill|dead|perish/i`
+- อเมนด์ commit ที่ปล่อยแล้วไม่ได้ (ruleset `protect-main` กัน force-push)
+- อย่าอ้างจำนวนเทสว่าเป็น "จำนวนบรรทัด `ok`": `node --test` เปล่า ๆ นับ `tools/test-summary.mjs` เป็นไฟล์เทสด้วย ตัวเลขที่นับคือ `# tests N` จาก glob `tests/**/*.test.mjs`
 
 ## Next step
 
-ขั้นแรก: ถามนายท่านว่าตกลงทำ N1 + N2 เป็น v3.4.6 ไหม (เสนอไว้แล้ว ยังไม่ตอบ) ถ้าตกลง เริ่ม N1 ด้วยเทสก่อน (TDD) ลำดับทั้งหมด:
+1. นายท่านอัปเดตสคริปต์ใน Tampermonkey (หรือรอ auto-update จาก `@version` 3.4.6) แล้วรีโหลดหน้าเกม
+2. ตรวจ 3 ข้อนี้ในเกม: (ก) พิมพ์ในช่องเงินแล้วไม่กดบันทึก → เงินช่องอื่น/กระเป๋ายังรีเฟรช และค่าที่พิมพ์ไม่หาย (ข) กด "ตรวจอีกครั้ง" ในแท็บค่าหลัก → ค่าที่พิมพ์ค้างไม่ถูกทับ (ค) ช่วยเลือกยังให้คะแนน/กดอัตโนมัติได้เหมือน v3.4.5
+3. ถ้าผ่าน: อัปเดต `CLAUDE.md` §6 บรรทัด v3.4.6 เป็น "ตรวจในเกมแล้ว ผ่าน" แล้ว commit docs
+4. ถ้าไม่ผ่าน: finding ที่เหลือ (C10-C14, S1, T4, T6) ยังไม่ได้ทำ — เริ่มจากสาเหตุที่ทำให้ข้อนั้นไม่ผ่านก่อน
 
-1. N1 — `dirty` ค้าง (กลาง) แก้ฝั่ง DOM: `dirty` เป็น `Set` ของ id, `fresh()` เขียนเฉพาะช่องที่ไม่อยู่ในชุด, ล้างเมื่อ `focusout` และค่าเท่ากับ state เดิม
-2. N2 — เพิ่ม `else { clearTimeout(aiTimer); aiPend = null; }` ต่อจาก `:1113`
-3. C3 + C4 — ครอบ try/catch ที่ `:882` และ `:984-990` ให้ความล้มเหลวมี toast
-4. C9 + T3 + C7 + T5 — ย้ายรายการคีย์ sim เข้า `simPatch`/`stateLines` ให้มาจากที่เดียว แล้วเพิ่มเทสกันหลุด
-5. N3 + C8 + N4 — ข้อความ `pending` รูปร่างผิด, ข้อความ `EV_UNSUPPORTED`, `esc` ค่าสี
-
-ก่อนปล่อยทุกครั้ง: `node --check wox-editor.user.js`, `node --test "tests/**/*.test.mjs"` ต้องได้ `skipped 0`, bump `@version` + `VERSION`, แล้ว `node tools/release.mjs "ข้อความ (vX.Y.Z)"` **บน `main` เท่านั้น** — ถ้าทำใน branch ก่อน merge จะ bump ซ้ำไม่ได้เพราะไม่มีอะไรให้ commit
+ก่อนปล่อยทุกครั้ง: `node --check wox-editor.user.js`, `node --test "tests/**/*.test.mjs"` ต้องได้ `skipped 0`, bump `@version` + `VERSION`, แล้ว `node tools/release.mjs "ข้อความ (vX.Y.Z)"` **บน `main` เท่านั้น**
 
 ## Waiting on the user
 
-- ยังไม่ตอบข้อเสนอ: ทำ N1 + N2 รวมเป็น v3.4.6
-- นายท่านต้องอัปเดตสคริปต์ใน Tampermonkey และรีโหลดหน้าเกมเองเมื่อมีเวอร์ชันใหม่ และเป็นคนยืนยันผลในเกม (ตาม §7 ของ CLAUDE.md)
+- ตรวจ v3.4.6 ในเกม (3 ข้อข้างบน)
+- นายท่านเป็นคนอัปเดตสคริปต์ใน Tampermonkey และยืนยันผลในเกม (ตาม §7 ของ CLAUDE.md)
 
 ## Files and places
 
-- `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev\wox-editor.user.js` — สคริปต์หลัก v3.4.5, 1192 บรรทัด; `LOC` คือ namespace ของ pure function ที่มีเทส (โหลดแบบ CommonJS ได้เมื่อไม่มี `document`)
-- `...\CLAUDE.md` — กติกาโปรเจกต์, บทเรียน §5, สถานะเวอร์ชัน §6, วิธีรับมือเกมอัปเดต §8
-- `...\AGENTS.md` — ทางเข้าแบบสั้น ชี้กลับมาที่ `CLAUDE.md`
-- `...\HANDOFF.md` — ไฟล์นี้
-- `...\tests\` — 72 เทส; `scoring.test.mjs` คือของ v3.4.4-3.4.5, `sim.test.mjs` ต้องมี `bundle/`
-- `...\tools\release.mjs` — ตรวจ version sync + `node --check` + เทส + `skipped 0` แล้ว commit + push
-- `...\tools\test-summary.mjs` — อ่านบรรทัด `# skipped` ให้ release
-- `...\tools\fetch-bundle.mjs` — ดึง build ปัจจุบันลง `bundle\<BUILD>\` (gitignore)
-- `...\tools\snapshot-diff.mjs`, `...\tools\locate-sim.mjs` — เครื่องมือช่วยวิเคราะห์ ห้ามลบ
+- `...\wox-editor.user.js` — สคริปต์หลัก v3.4.6, 1251 บรรทัด; `LOC` คือ namespace ของ pure function ที่มีเทส (โหลดแบบ CommonJS ได้เมื่อไม่มี `document`)
+- `...\CLAUDE.md` — กติกา, บทเรียน §5 (เพิ่ม 6 ข้อของ v3.4.6), สถานะ §6, วิธีรับมือเกมอัปเดต §8
+- `...\tests\` — 77 เทส; `panel.test.mjs` มี `fieldKey`, `health.test.mjs` มี `pending`/`STATE_OPTIONAL`, `sim.test.mjs` มีเทสรายชื่อคีย์, `sim.test.mjs` ต้องมี `bundle/`
+- `...\tools\release.mjs` / `test-summary.mjs` / `fetch-bundle.mjs` — release + กัน skip + ดึง bundle; `tools/snapshot-diff.mjs`, `locate-sim.mjs` ห้ามลบ
+- `...\docs\superpowers\notes\2026-11-18-audit-v345.md` — finding รอบล่าสุด (commit แล้ว)
+- `...\docs\superpowers\notes\2026-11-18-audit-v342.md` — audit ก่อนหน้า
 - `...\bundle\mwlq36t8\` — build ที่ตรงกับของสด (gitignore)
-- `...\docs\superpowers\notes\2026-11-18-audit-v345.md` — **audit รอบล่าสุด N1-N4, C3-C14, S1, T3-T6** (ยังไม่ commit)
-- `...\docs\superpowers\notes\2026-11-18-audit-v342.md` — audit รอบก่อน (C1-C14, T1-T5, S1) บริบทของ finding ที่ยังเปิด
-- `...\docs\superpowers\plans\2026-11-18-audit-fixes-v342.md` — แผนที่รันแล้ว (T1, C1, C2, C5, C6)
 - `...\journal\2026-11-18.md` — บันทึกบทเรียนของวัน (gitignore)
 
 ## Changes made
 
-- `docs\superpowers\notes\2026-11-18-audit-v345.md` — ไฟล์ใหม่ finding ของ v3.4.5 — **ยังไม่ commit**
-- `HANDOFF.md` — เขียนใหม่ทับฉบับก่อน
-- ทั้งสองไฟล์ commit แล้วใน commit `docs: record the v3.4.5 audit and hand off`
-- ไม่มีการแก้ `wox-editor.user.js`, tests หรือ tools ในรอบนี้
+- `wox-editor.user.js` — N1, N2, N3, N4, C3, C4, C7, C8, C9 + bump 3.4.6
+- `tests/panel.test.mjs`, `tests/health.test.mjs`, `tests/sim.test.mjs` — เทสใหม่ 4 ตัว; `tests/core.test.mjs` — ข้อความ `EV_UNSUPPORTED`
+- `CLAUDE.md` — §2 จำนวนบรรทัด, §5 บทเรียน 6 ข้อ, §6 บรรทัด v3.4.6
+- ทั้งหมดอยู่ใน commit `ec84b3f` (push ขึ้น origin แล้ว); `HANDOFF.md` ไฟล์นี้ยังไม่ commit
