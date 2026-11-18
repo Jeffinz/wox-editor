@@ -19,6 +19,15 @@ test('tierIdx maps rarity strings to the game step with the same badge color', (
   assert.equal(LOC.tierIdx(undefined), 0); // คงพฤติกรรมเดิม: ไม่มี tier = สามัญ
 });
 
+test('tierIdx clamps below at 0 so a negative tier cannot outrank legendary', () => {
+  assert.equal(LOC.tierIdx(-1), 0);
+  assert.equal(LOC.tierIdx(-5), 0);
+  // ไอเทม tier ติดลบต้องไม่ถูกเรียงขึ้นเหนือขั้นสูงสุด และต้องไม่หลุดตัวกรองทั้งหมด
+  const xs = [{ tier: -1, slot: 'b' }, { tier: 5, slot: 'a' }];
+  assert.deepEqual(xs.sort(LOC.itemOrder).map((x) => x.tier), [5, -1]);
+  assert.equal(LOC.tierMatches({ tier: -1 }, '0'), true);
+});
+
 test('itemOrder sorts high tier first, unknown last, then slot', () => {
   const xs = [{ tier: 'common', slot: 'b' }, { tier: 'weird', slot: 'a' }, { tier: 'epic', slot: 'z' }, { tier: 2, slot: 'a' }];
   assert.deepEqual(xs.sort(LOC.itemOrder).map((x) => x.tier), ['epic', 2, 'common', 'weird']);

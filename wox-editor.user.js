@@ -101,7 +101,8 @@
       const rar = rarKey(raw);
       if (rar) return RAR_TO_TIER[rar];
       const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
-      return Number.isFinite(n) ? Math.min(5, n) : null;
+      // จำกัดสองด้าน: เกิน 5 คือขั้นสูงสุด, ติดลบต้องไม่หลุดขึ้นเหนือ legendary และยังถูกตัวกรองขั้น 0 รับ (R7)
+      return Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : null;
     };
     // ตัวเรียงไอเทม (pure, ห้าม throw): ระดับสูงก่อน → ระดับที่รู้ไม่ได้อยู่ท้าย → ชื่อช่อง
     // slot อาจไม่ใช่สตริงหรือไม่มีเลย จึงต้องแปลงด้วย String เสมอ (ของเดิมเรียก slot.localeCompare ตรง ๆ แล้ว throw)
@@ -141,9 +142,7 @@
       const id = String(f?.id ?? '');
       return id === 'hm' || /^(h_|s_)/.test(id) ? id : null;
     };
-    // ช่องที่ fresh() เขียนค่าจากเกมลงไป (pure, ห้าม throw): ผู้ใช้พิมพ์ในช่องพวกนี้แล้วยังไม่บันทึก รอบรีเฟรชต้องไม่ทับ
-    // ช่องค้นหา/กรอง/ช่วยเลือกไม่นับ เพราะ fresh() ไม่แตะ
-    const isStateField = (f) => fieldKey(f) !== null;
+    // ช่องที่ fresh() เขียนค่าจากเกมลงไปอยู่ที่ fieldKey — isStateField ถูกถอดใน v3.4.7 เพราะไม่มีใครเรียกแล้ว (R4)
     // คีย์จำผลสแกนของการ์ด (pure): เปลี่ยนเมื่อการ์ด/การตั้งค่าเปลี่ยน หรือเมื่อ sim เพิ่งมาถึง
     const aiKey = (sig, simOn) => (simOn ? '1' : '0') + '|' + String(sig ?? '');
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
@@ -308,7 +307,7 @@
       if (!Array.isArray(scores) || scores.length < 2) return false;
       return scores.every((s) => s === scores[0]);
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, fieldKey, isStateField, aiKey, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, fieldKey, aiKey, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -756,7 +755,15 @@
       const seen = new Set();
       EVENTS = SIM.allMajors().filter((e) => e && e.id && e.options?.length && !seen.has(e.id) && seen.add(e.id));
     };
+    // sim ที่ throw ต้องได้ข้อความถึงผู้ใช้ทุกทางที่เรียก (คลิกแท็บ/พิมพ์ค้นหา/เปลี่ยนตัวกรอง) ไม่ใช่ error เงียบใน console (R5)
     const drawEvents = () => {
+      try { renderEventList(); } catch (e) {
+        console.error('[WoX Editor]', e);
+        $('hevn').textContent = LOC.EV_UNSUPPORTED + ' — ' + (e?.message ?? e);
+      }
+    };
+    // ประกาศแบบ function เพื่อให้ hoist: drawEvents ถูกเรียกได้ก่อนบรรทัดนี้ (showTab ตอนเปิดแผง)
+    function renderEventList() {
       buildEvents();
       // ยังไม่มี sim: ห้ามลงว่า "ไม่พบ" เพราะผู้ใช้จะคิดว่าค้นผิด
       if (!SIM && !EVENTS.length) { $('hevn').textContent = LOC.EV_UNSUPPORTED + (simError ? ' — ' + simError : ''); return; }
@@ -859,10 +866,16 @@
       tables = LOC.keepTables(tables, c);
       if (tables.realms) {
         REALMS = tables.realms;
-        $('h_realm').innerHTML = REALMS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)} (${r.layers} ชั้น)</option>`).join('');
+        // คงค่าที่ผู้ใช้เลือกไว้: renderCore รอบ retry ต้องไม่ดีดช่องเลือกกลับไปตัวแรก (R2)
+        const prev = $('h_realm').value;
+        // r.layers มาจากตารางของเกม จึงต้องผ่าน esc เหมือนค่าอื่นที่เขียนลง HTML (R3)
+        $('h_realm').innerHTML = REALMS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)} (${esc(r.layers)} ชั้น)</option>`).join('');
+        if ([...$('h_realm').options].some((o) => o.value === prev)) $('h_realm').value = prev;
       }
       if (tables.martialRanks) {
+        const prev = $('h_mrank').value;
         $('h_mrank').innerHTML = tables.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
+        if ([...$('h_mrank').options].some((o) => o.value === prev)) $('h_mrank').value = prev;
       }
       // ต้องตั้ง TIERS ก่อน drawItems() เพราะรายการไอเทมอ่านป้ายระดับจากตารางของเกม
       TIERS = tables.tiers;
@@ -934,18 +947,27 @@
       if (t.martial) { fill('h_mrank', t.martial.rank); fill('h_mstage', t.martial.stage); fill('h_mforce', Math.round(t.martial.force ?? 0)); }
       fill('h_karma', t.karma ?? 0); fill('h_fame', t.fame ?? 0);
       fill('h_realm', t.realm ?? 0); fill('h_layer', t.layer ?? 0); fill('h_qi', Math.round(t.qi ?? 0));
-      fill('hm', t.money);
+      fill('hm', t.money ?? '');
       for (const [k] of STATS) fill('s_' + k, t.stats?.[k] ?? '');
       // สร้างแถวกระเป๋าใหม่เฉพาะเมื่อกระเป๋าเปลี่ยน: สร้างใหม่ทุกรอบจะแทนปุ่ม "ตั้ง/ลบ" ระหว่างผู้ใช้กดจนคลิกหาย
-      // แถวที่มีช่องพิมพ์ค้างอยู่ (bagLocked) ห้ามสร้างใหม่ ไม่งั้นค่าที่พิมพ์หาย
+      // ช่องที่พิมพ์ค้างอยู่ (dirty "b:<id>") ต้องไม่ล็อกทั้งลิสต์: เก็บค่าที่พิมพ์ไว้แล้วใส่กลับหลังสร้างใหม่ (R1)
+      // แถวที่เกมเอาไอเทมออกจากกระเป๋าแล้วไม่มีที่ให้ค่าค้างอยู่ จึงปลดคีย์ทิ้ง
       const bag = t.bag ?? {};
       const bagSig = JSON.stringify(bag);
-      const bagLocked = [...dirty].some((k) => k.startsWith('b:'));
-      if (!bagLocked && (force || bagSig !== lastBagSig)) {
+      if (force || bagSig !== lastBagSig) {
         lastBagSig = bagSig;
+        const pending = new Map();
+        for (const k of [...dirty]) {
+          if (!k.startsWith('b:')) continue;
+          const id = k.slice(2);
+          const el = bagInput(id);
+          if (!el || !Object.prototype.hasOwnProperty.call(bag, id)) { dirty.delete(k); continue; }
+          pending.set(id, el.value);
+        }
         $('hbag').innerHTML = Object.keys(bag).length
           ? Object.entries(bag).map(([id, n]) => `<div class="bagrow"><span class="nm">${ITEMS?.[id] ? rarDot(itemRar(ITEMS[id])[1]) + ' ' : ''}${esc(name(id))}${ITEMS?.[id] ? ` <small class="rtxt">· ${esc(itemRar(ITEMS[id])[0])}</small>` : ''}</span><input data-b="${esc(id)}" type="number" value="${esc(n)}" aria-label="จำนวน ${esc(name(id))}"><button class="b" data-bset="${esc(id)}">ตั้ง</button><button class="b dng" data-bdel="${esc(id)}" aria-label="ลบ ${esc(name(id))}">ลบ</button></div>`).join('')
           : '<div class="empty">กระเป๋าว่าง เพิ่มไอเทมได้ด้านล่าง</div>';
+        for (const [id, v] of pending) { const el = bagInput(id); if (el) el.value = v; }
       }
       return true;
     };
@@ -1196,9 +1218,12 @@
     const TABLES = LOC.TABLES;
     const statKeys = STATS.map(([k]) => k);
     // สถานะ sim สำหรับแผงตรวจระบบ: ok เมื่อมี SIM, error เมื่อรู้เหตุผล, ไม่งั้นยังรอ
-    const simInfo = () => SIM
-      ? { state: 'ok', funcs: LOC.SIM_KEYS.length, events: SIM.allMajors().length }
-      : { state: simError ? 'error' : 'waiting', reason: simError };
+    // SIM.allMajors() throw = sim ไม่พร้อมจริง ต้องรายงานเป็น error ไม่ใช่ปล่อยให้แผงค้าง (R5)
+    const simInfo = () => {
+      if (!SIM) return { state: simError ? 'error' : 'waiting', reason: simError };
+      try { return { state: 'ok', funcs: LOC.SIM_KEYS.length, events: SIM.allMajors().length }; }
+      catch (e) { return { state: 'error', reason: 'sim อ่านรายการอีเว้นต์ไม่ได้ — ' + (e?.message ?? e) }; }
+    };
     const runHealth = async () => {
       // ตรวจ state ก่อน เพราะทำได้ทันทีโดยไม่ต้องรอ chunk
       const state = LOC.stateLines(t, statKeys);
@@ -1244,7 +1269,14 @@
       $('hupd').textContent = msg;
       toast(lost.length ? 'มีตารางที่เคยเจอหายไป ดูในแผง' : 'เกมอัปเดตแล้ว ดูรายละเอียดในแผง', lost.length > 0);
     };
-    setTimeout(() => { runHealth(); checkUpdate(); }, 3000);
+    // two async ที่ไม่ได้ await: throw = unhandled rejection และแผงค้างที่ข้อความเดิม ต้องรายงานในแผงแทน (R5)
+    setTimeout(() => {
+      runHealth().catch((e) => {
+        console.error('[WoX Editor]', e);
+        $('hchk').textContent = 'ตรวจระบบไม่สำเร็จ — ' + (e?.message ?? e);
+      });
+      checkUpdate().catch((e) => console.error('[WoX Editor]', e));
+    }, 3000);
 
     setInterval(() => fresh(), 2000);
   });
