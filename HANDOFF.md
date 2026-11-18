@@ -1,5 +1,7 @@
 # Handoff: v3.4.1 ปล่อยบน main แล้ว — รอตรวจในเกมจริง 4 ข้อ
 
+> **ปิดแล้ว 2026-11-18:** v3.4.1 ไม่ผ่านข้อ 1-3 บน build `mwlnu1rf` (`simNames` นับ `sh` ใน `xe.fish=`) แก้ใน v3.4.2 (`a230e64`) นายท่านตรวจในเกมแล้ว ผ่านครบ 4 ข้อ เนื้อหาด้านล่างเป็นบันทึกเก่า ยังค้างแค่การตัดสินว่าจะลบ `origin/feat/events-v3.4.0` ไหม
+
 Written: 2026-11-18 12:12 · Working directory: `C:\Users\PC\Desktop\Wox UI\way-of-xian.wox-game.workers.dev`
 
 อ่าน `CLAUDE.md` ก่อน กติกาอยู่ในนั้น: ตอบภาษาไทย, รัน `node --check`, bump `@version` + `VERSION` พร้อมกัน, ปล่อยด้วย `tools/release.mjs`, เรียกผู้ใช้ว่า "นายท่านชาโดว์", **ห้ามแยก subagent** (§7)
