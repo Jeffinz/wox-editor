@@ -244,8 +244,58 @@
   const VERSION = '3.3.3'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
+  let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
   // tables = ตารางที่อ่านได้สะสมข้ามรอบ (F2); chainCache = ชื่อ chunk ที่หาได้แล้ว ใช้ข้าม fetch สามไฟล์ตอน retry (R2)
   let tables = null, chainCache = null;
+
+  // ---------- ติดตั้ง import map shim ก่อนเกมโหลด app (พิสูจน์ในเกมจริงแล้ว 2026-11-18) ----------
+  // ต้องเป็น DOM node: document.write เขียนทับเอกสาร (หน้าเกมจอดำ) ห้ามใช้
+  const simErrorOf = (e) => String((e && e.message) || e);
+  const xhrText = (path) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', location.origin + path, false);
+    x.send(null);
+    if (x.status !== 200) throw new Error(path + ' ตอบ ' + x.status);
+    return x.responseText;
+  };
+  const installSim = () => {
+    // เฉพาะหน้าเกม '/' และเฉพาะตอนที่ parser ยังไม่เริ่ม: import map ที่มาสายถูกเมิน
+    if (location.pathname !== '/') return;
+    if (document.readyState !== 'loading') { window.__woxSimError = 'ติดตั้ง import map ไม่ทัน (หน้านี้โหลดไปแล้ว)'; return; }
+    if (document.querySelector('script[type="module"]')) { window.__woxSimError = 'ติดตั้ง import map ไม่ทัน (boot เริ่มโหลดแล้ว)'; return; }
+    try {
+      const index = xhrText('/');
+      const bootPath = LOC.chunkChain(index, '', '').boot;
+      if (!bootPath) throw new Error('ไม่พบ boot script ใน index.html');
+      const appPath = LOC.chunkChain(index, xhrText(bootPath), '').app;
+      if (!appPath) throw new Error('ไม่พบ app chunk ใน boot');
+      const appUrl = LOC.chunkUrl(appPath, location.origin);
+      // shim ฝัง LOC ด้วย toString (จึงห้ามฟังก์ชันเหล่านี้อ้างตัวแปรนอกตัวเอง) แล้วรันเป็น ES module
+      const shim = 'const simNames=' + LOC.simNames + ',absolutize=' + LOC.absolutize + ',simPatch=' + LOC.simPatch + ';\n' +
+        'const appUrl=' + JSON.stringify(appUrl) + ';\n' +
+        'try {\n' +
+        '  const text = await (await fetch(appUrl, { cache: "force-cache" })).text();\n' +
+        '  const names = simNames(text);\n' +
+        '  if (!names) throw new Error("หา sim ใน app ไม่เจอ (โค้ดเกมเปลี่ยนรูปร่าง)");\n' +
+        '  const a = absolutize(text, new URL(".", appUrl).href);\n' +
+        '  const url = URL.createObjectURL(new Blob([a.src + simPatch(names)], { type: "text/javascript" }));\n' +
+        '  await import(url);\n' +
+        '} catch (e) {\n' +
+        '  window.__woxSimError = String((e && e.message) || e);\n' +
+        '  await import(appUrl + "?woxed=raw");\n' +
+        '}\n';
+      const shimUrl = URL.createObjectURL(new Blob([shim], { type: 'text/javascript' }));
+      const map = document.createElement('script');
+      map.type = 'importmap';
+      map.textContent = LOC.importMapJson(appUrl, shimUrl);
+      const parent = document.head || document.documentElement;
+      if (!parent) throw new Error('ไม่มี head ให้แทรก import map');
+      parent.insertBefore(map, parent.firstChild);
+    } catch (e) {
+      window.__woxSimError = simErrorOf(e); // เกมโหลดแบบเดิมต่อไปได้ ไม่มี sim
+    }
+  };
+  installSim();
 
   // จับ state ตอนเกมเซฟ (ต้องเกิดอย่างน้อย 1 ครั้ง)
   const orig = JSON.stringify;
@@ -263,6 +313,27 @@
     get: (k) => { try { return localStorage.getItem('woxed.' + k); } catch { return null; } },
     set: (k, v) => { try { localStorage.setItem('woxed.' + k, v); } catch { /* ignore */ } },
   };
+
+  // ห่อ __woxSim ด้วยชื่อเดิมที่โค้ดส่วนอื่นเรียกอยู่ (สเปค §2)
+  const makeSim = (w) => ({
+    majorEvent: (id) => w.majorEvent(id),
+    majorTexts: (x) => w.majorTexts(x),
+    statOdds: (x, chance, ev, opt) => w.statOdds(x, chance, ev, opt),
+    rarityFor: (ev) => w.rarityFor(ev),
+    allMajors: () => [...w.events.values()],
+    openOptions: (x, ev) => w.openOptions(x, ev),
+  });
+  // ต้อง poll: boot เรียก wt() แบบไม่ await → load event มาก่อน shim
+  const simReady = new Promise((res) => {
+    const t0 = Date.now();
+    const step = () => {
+      if (window.__woxSim) { SIM = makeSim(window.__woxSim); return res(); }
+      if (window.__woxSimError) { simError = String(window.__woxSimError); return res(); }
+      if (Date.now() - t0 >= 60000) { simError = 'รอ sim เกิน 60 วินาที'; return res(); }
+      setTimeout(step, 500);
+    };
+    step();
+  });
 
   // สีและฟอนต์อิงจากธีมของเกม (jade / paper / cinnabar) ให้แผงดูเป็นส่วนเดียวกับเกม
   const STYLE = `
@@ -731,8 +802,7 @@
           .sort(LOC.itemOrder);
         drawItems();
       } else $('hqn').textContent = ITEMS_FAIL;
-      // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404)
-      $('hevn').textContent = LOC.EV_UNSUPPORTED;
+      // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404); sim มาจาก shim แทน
       fresh(true);
     };
     // promise เดียวใช้ร่วมกันทั้งวาดแผง ตรวจระบบ และตรวจอัปเดต: fetch index/boot/app ครั้งเดียวต่อรอบ
@@ -761,6 +831,8 @@
     // ใช้ promise ที่มีอยู่ ถ้าไม่มี (ยังไม่เริ่ม หรือรอบก่อนไม่ครบ) เริ่มรอบใหม่
     const getCore = () => corePromise ?? startCore();
     startCore();
+    // sim มาถึงทีหลังเกมโหลด: drawEvents จัดการทั้งกรณีมีและไม่มี sim (แสดงเหตุผลเมื่อไม่มี)
+    simReady.then(() => { drawEvents(); aiScan(); });
 
     // ---------- แสดงค่าปัจจุบัน ----------
     const name = (id) => ITEMS?.[id]?.th ?? id;
