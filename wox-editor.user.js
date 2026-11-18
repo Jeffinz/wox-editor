@@ -145,6 +145,8 @@
       for (const k of ['realms', 'martialRanks', 'tiers', 'items']) out[k] = next?.[k] ?? prev?.[k] ?? null;
       return out;
     };
+    // ข้อความเดียวของแท็บอีเว้นต์/ช่วยเลือกเมื่อยังไม่รองรับเกมแบบ bundle (ทุกจุดที่พูดเรื่องนี้ใช้ค่านี้)
+    const EV_UNSUPPORTED = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
     // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore() (ตรวจระบบกับตรวจอัปเดตอ่านชุดเดียวกัน)
     const TABLES = [['REALMS', 'realms'], ['MARTIAL_RANKS', 'martialRanks'], ['TIERS', 'tiers'], ['ITEMS', 'items']];
     // ฟิลด์ของ state ที่แผงแก้ได้: กลุ่มแรกต้องมี กลุ่มหลังมีหรือไม่มีก็ได้ตามเส้นทางของตัวละคร
@@ -176,7 +178,7 @@
       out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
       return out;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -545,6 +547,8 @@
     };
     const drawEvents = () => {
       buildEvents();
+      // เกมแบบ bundle ยังไม่มีแหล่งข้อมูลอีเว้นต์: ห้ามลงว่า "ไม่พบ" เพราะผู้ใช้จะคิดว่าค้นผิด
+      if (!SIM && !EVENTS.length) { $('hevn').textContent = LOC.EV_UNSUPPORTED; return; }
       const q = norm($('hevq').value).trim(), g = $('hevg').value, r = $('hevr').value;
       const key = new Map(EVENTS.map((e) => [e.id, evKey(e)]));
       // เรียงหายากก่อน (ตำนานไปธรรมดา) แล้วตามชื่อ
@@ -659,7 +663,7 @@
         drawItems();
       } else $('hqn').textContent = ITEMS_FAIL;
       // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404)
-      $('hevn').textContent = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
+      $('hevn').textContent = LOC.EV_UNSUPPORTED;
       fresh(true);
     };
     // promise เดียวใช้ร่วมกันทั้งวาดแผง ตรวจระบบ และตรวจอัปเดต: fetch index/boot/app ครั้งเดียวต่อรอบ
@@ -693,7 +697,8 @@
     const name = (id) => ITEMS?.[id]?.th ?? id;
     const fresh = (force) => {
       if (!t) return false;
-      if (force || root.activeElement?.tagName !== 'INPUT') {
+      // ไม่เขียนทับช่องที่ผู้ใช้กำลังแก้: ครอบทั้งช่องกรอก ช่องเลือก และกล่องข้อความ
+      if (force || !['INPUT', 'SELECT', 'TEXTAREA'].includes(root.activeElement?.tagName)) {
         $('h_mst').textContent = t.martial ? '' : 'ตัวละครนี้ไม่ได้อยู่สายยุทธ์ จึงแก้ส่วนนี้ไม่ได้';
         if (t.martial) { $('h_mrank').value = t.martial.rank; $('h_mstage').value = t.martial.stage; $('h_mforce').value = Math.round(t.martial.force ?? 0); }
         $('h_karma').value = t.karma ?? 0; $('h_fame').value = t.fame ?? 0;
@@ -712,9 +717,14 @@
       (t.capSeen ??= {})[k] = Math.max(t.capSeen[k] ?? 0, v); // กันเกมดึงค่ากลับลงตามเพดาน
     };
 
+    // เขียน DOM เฉพาะเมื่อสถานะเปลี่ยน (ทุกวินาทีเดิมเขียนทับทุกครั้งโดยไม่จำเป็น)
+    let lastOn = null;
     setInterval(() => {
-      $('dot').classList.toggle('on', !!t);
-      $('hs').textContent = t ? 'เชื่อมต่อแล้ว' : 'รอข้อมูลเกม · เล่นในเกม 1 เดือน';
+      const on = !!t;
+      if (on === lastOn) return;
+      lastOn = on;
+      $('dot').classList.toggle('on', on);
+      $('hs').textContent = on ? 'เชื่อมต่อแล้ว' : 'รอข้อมูลเกม · เล่นในเกม 1 เดือน';
     }, 1000);
 
     // ---------- ปุ่มต่างๆ ----------
@@ -776,6 +786,7 @@
         (t.bag ??= {})[id] = (t.bag[id] ?? 0) + n;
         msg = `เพิ่ม ${name(id)} ×${n} แล้ว`;
       } else if (b.id === 'hevb') {
+        if (!SIM && !EVENTS.length) return toast(LOC.EV_UNSUPPORTED, true);
         const ev = SIM?.majorEvent($('hevl').value) ?? EVENTS.find((x) => x.id === $('hevl').value);
         if (!ev) return toast('เลือกอีเว้นต์จากรายการก่อน', true);
         if (t.pending && !confirm('ตอนนี้มีอีเว้นต์ค้างอยู่ จะเขียนทับไหม')) return;
@@ -851,6 +862,8 @@
     // ป้ายแนะนำวางทับข้างปุ่มบนการ์ด: อยู่ใน shadow root ของเราเอง จึงไม่แตะ DOM ของเกม และ observer ไม่เห็น
     // pointer-events: none ทำให้คลิกปุ่มของเกมได้ตามปกติ
     function placeBadges() {
+      // ไม่มีป้ายให้วางและไม่มีป้ายค้าง = ไม่ต้องแตะ DOM เลย
+      if (!aiBadges.length && !root.querySelector('.aibadge')) return;
       root.querySelectorAll('.aibadge').forEach((n) => n.remove());
       for (const k of aiBadges) {
         if (!k.b.isConnected) continue;
@@ -864,8 +877,15 @@
         root.appendChild(el);
       }
     }
-    addEventListener('scroll', placeBadges, { passive: true, capture: true });
-    addEventListener('resize', placeBadges);
+    // scroll/resize ยิงถี่มาก: วางป้ายครั้งเดียวต่อเฟรมพอ
+    let badgeQueued = false;
+    const queueBadges = () => {
+      if (badgeQueued) return;
+      badgeQueued = true;
+      requestAnimationFrame(() => { badgeQueued = false; placeBadges(); });
+    };
+    addEventListener('scroll', queueBadges, { passive: true, capture: true });
+    addEventListener('resize', queueBadges);
     function aiScan() {
       const cfg = aiCfg();
       const btns = t?.pending?.kind === 'major' ? [...document.querySelectorAll('#choice-options button[id^="choice-"]')] : [];
@@ -925,7 +945,8 @@
         placeBadges();
       });
     });
-    aiObs.observe(document.body, { childList: true, subtree: true });
+    // เกมแบบ bundle ไม่มี SIM = ไม่มีแหล่งข้อมูลอีเว้นต์ให้เฝ้า จึงไม่เริ่ม observer จนงาน (ก) ต่อข้อมูลจริง
+    if (SIM) aiObs.observe(document.body, { childList: true, subtree: true });
 
     // ---------- ตรวจระบบหลังเกมอัปเดต: ตารางจาก chunk หลัก + ฟิลด์ของ state ----------
     // ตารางและฟิลด์ state อยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
@@ -944,7 +965,7 @@
       lines.push(c?.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
       // ตารางที่ยังไม่รู้ (chunk โหลดไม่ครบ / state ยังไม่มา) ต้องขึ้น "–" ไม่ใช่ "✖" (LOC.tableLines ตัดสินให้)
       lines.push(...LOC.tableLines(c));
-      lines.push('– อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle (ดู Task 5)');
+      lines.push('– ' + LOC.EV_UNSUPPORTED);
       show([...lines, ...state]);
     };
     // ตรวจการอัปเดต: ใช้ build กับชื่อ chunk จาก loadCore() เทียบกับฐานใน localStorage

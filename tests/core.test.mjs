@@ -22,6 +22,10 @@ test('keepTables accepts null on both sides', () => {
   assert.deepEqual(LOC.keepTables(null, null), { realms: null, martialRanks: null, tiers: null, items: null });
 });
 
+test('EV_UNSUPPORTED is one message for every place that says it', () => {
+  assert.equal(LOC.EV_UNSUPPORTED, 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle');
+});
+
 test('numOrKeep keeps the old value for empty or bad input', () => {
   assert.equal(LOC.numOrKeep('', 7), 7);
   assert.equal(LOC.numOrKeep('abc', 7), 7);
