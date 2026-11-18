@@ -40,3 +40,11 @@ test('tierMatches: ไอเทมระดับชื่อกรองด้�
   assert.equal(LOC.tierMatches({ tier: 'weird' }, 'all'), true);
   assert.equal(LOC.tierMatches({ tier: 5 }, 'all'), true);
 });
+
+test('tierLabels: ใช้ชื่อขั้นของเกมเมื่อมี และถอยไปใช้ค่าคงที่เมื่อไม่มี', () => {
+  assert.deepEqual(LOC.tierLabels(null), LOC.TIER_LBL.map(([n]) => n));
+  assert.deepEqual(LOC.tierLabels([]), LOC.TIER_LBL.map(([n]) => n));
+  const game = [{ th: 'สามัญ' }, { th: 'ขั้นมนุษย์' }, { th: 'ขั้นปฐพี' }];
+  assert.deepEqual(LOC.tierLabels(game), ['สามัญ', 'ขั้นมนุษย์', 'ขั้นปฐพี']);
+  assert.deepEqual(LOC.tierLabels([{ th: 'ก' }, { color: '#000' }, { th: 'ค' }]), ['ก', LOC.TIER_LBL[1][0], 'ค']);
+});

@@ -119,6 +119,11 @@
       const k = tierIdx(item?.tier);
       return k === null || String(k) === f;
     };
+    // ชื่อขั้นของไอเทมสำหรับตัวกรอง (pure): อ่านจากตาราง TIERS ของเกมก่อน แถวที่ใช้ไม่ได้ถอยไปใช้ TIER_LBL
+    const tierLabels = (tiers) => {
+      if (!Array.isArray(tiers) || !tiers.length) return TIER_LBL.map(([n]) => n);
+      return tiers.map((r, i) => (typeof r?.th === 'string' ? r.th : (TIER_LBL[i]?.[0] ?? '')));
+    };
     // อ่านค่าตัวเลขจากช่องกรอก (pure): คืน null เมื่อว่างหรือไม่ใช่จำนวนจริง เพื่อไม่ให้เขียน 0 ทับค่าเดิม
     const numOr = (x) => {
       if (typeof x === 'number') return Number.isFinite(x) ? x : null;
@@ -243,7 +248,7 @@
       if (info?.state === 'error') return '✖ sim: ' + (info.reason || 'ไม่ทราบสาเหตุ');
       return '– sim: ยังรอ';
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, isStateField, aiKey, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, isStateField, aiKey, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -656,7 +661,14 @@
     // ลำดับชั้นของไอเทม: ใช้ LOC.tierIdx (null = จับคู่แถว TIERS ไม่ได้)
     // ตัวเลือกกรองมีชุดเดียวคือขั้นของเกม เพราะไอเทมที่แผงแสดง (ตารางที่มี woodSword) ใช้ tier ตัวเลขชุดเดียวกับ TIERS
     // ไอเทมที่ tier เป็นชื่อ (ชุดเครื่องประดับ) อยู่ในตารางอีกตัวที่ IS.items ไม่รับ จึงไม่ต้องมีตัวเลือกให้กรอง
-    $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' + TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('');
+    // ตัวเลือกกรองอ่านชื่อขั้นจากตาราง TIERS ของเกม (ถ้ามาแล้ว) และคงค่าเดิมที่เลือกไว้
+    const drawTierFilter = () => {
+      const prev = $('hqr').value || 'all';
+      const labels = LOC.tierLabels(TIERS);
+      $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' + labels.map((n, k) => `<option value="${k}">${esc(n)}</option>`).join('');
+      $('hqr').value = [...$('hqr').options].some((o) => o.value === prev) ? prev : 'all';
+    };
+    drawTierFilter();
     $('hevr').innerHTML = '<option value="all">ทุกระดับ</option>' + RAR_ORDER.map((k) => `<option value="${k}">${RAR_LBL[k][0]}</option>`).join('');
     let itemList = [];
     const drawItems = () => {
@@ -793,6 +805,7 @@
       }
       // ต้องตั้ง TIERS ก่อน drawItems() เพราะรายการไอเทมอ่านป้ายระดับจากตารางของเกม
       TIERS = tables.tiers;
+      drawTierFilter();
       if (tables.items) {
         ITEMS = tables.items;
         // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
