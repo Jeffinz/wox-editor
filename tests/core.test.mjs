@@ -21,3 +21,11 @@ test('keepTables takes new values', () => {
 test('keepTables accepts null on both sides', () => {
   assert.deepEqual(LOC.keepTables(null, null), { realms: null, martialRanks: null, tiers: null, items: null });
 });
+
+test('numOrKeep keeps the old value for empty or bad input', () => {
+  assert.equal(LOC.numOrKeep('', 7), 7);
+  assert.equal(LOC.numOrKeep('abc', 7), 7);
+  assert.equal(LOC.numOrKeep('0', 7), 0);
+  assert.equal(LOC.numOrKeep('12', 7), 12);
+  assert.equal(LOC.numOrKeep('', undefined), 0);
+});

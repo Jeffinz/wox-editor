@@ -118,6 +118,8 @@
       const n = +s;
       return Number.isFinite(n) ? n : null;
     };
+    // ค่าที่จะเขียนลงช่องที่ว่างแล้วควรคงค่าเดิม (pure): ช่องว่าง/ไม่ใช่ตัวเลข → ใช้ค่าเดิม (ไม่ใช่ตัวเลข → 0)
+    const numOrKeep = (x, prev) => numOr(x) ?? (Number.isFinite(prev) ? prev : 0);
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
     // ต้องตรงกับ URL ที่เกมใช้ทุกตัวอักษรเพื่อให้ได้ module instance เดิม
     const chunkUrl = (p, origin) => new URL(p, origin).href;
@@ -174,7 +176,7 @@
       out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
       return out;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -706,7 +708,7 @@
       return true;
     };
     const setStat = (k, v) => {
-      t.stats[k] = v;
+      (t.stats ??= {})[k] = v;
       (t.capSeen ??= {})[k] = Math.max(t.capSeen[k] ?? 0, v); // กันเกมดึงค่ากลับลงตามเพดาน
     };
 
@@ -725,36 +727,52 @@
       if (b.id === 'hchkb') return runHealth();
       if (!t) return toast('ยังไม่ได้รับข้อมูลเกม ให้เล่นในเกมสัก 1 เดือนก่อน', true);
       let msg = 'บันทึกแล้ว';
-      if (b.id === 'hmb') t.money = +$('hm').value || 0;
-      else if (b.id === 'hmr') {
+      // ช่องว่าง/ไม่ใช่ตัวเลข = ไม่เขียนอะไรทับค่าเดิม (เดิมเขียน 0 ทับ) แล้วบอกผู้ใช้
+      if (b.id === 'hmb') {
+        const money = LOC.numOr($('hm').value);
+        if (money === null) return toast('ใส่ตัวเลขก่อน', true);
+        t.money = money;
+      } else if (b.id === 'hmr') {
         if (!t.martial) return toast('ตัวละครนี้ไม่ได้อยู่สายยุทธ์', true);
         // ยังอ่านตาราง MARTIAL_RANKS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ rank 0 ทับค่าเดิม
         if (!$('h_mrank').options.length) return toast('ยังอ่านตารางระดับสายยุทธ์ไม่ได้ รอสักครู่แล้วลองใหม่', true);
         const rank = LOC.numOr($('h_mrank').value);
         if (rank === null) return toast('เลือกระดับสายยุทธ์ก่อน', true);
         t.martial.rank = rank;
-        t.martial.stage = LOC.numOr($('h_mstage').value) ?? 0;
-        t.martial.force = LOC.numOr($('h_mforce').value) ?? 0;
-      } else if (d.n) t[d.n] = +$('h_' + d.n).value || 0;
-      else if (b.id === 'hrl') {
+        t.martial.stage = LOC.numOrKeep($('h_mstage').value, t.martial.stage);
+        t.martial.force = LOC.numOrKeep($('h_mforce').value, t.martial.force);
+      } else if (d.n) {
+        const v = LOC.numOr($('h_' + d.n).value);
+        if (v === null) return toast('ใส่ตัวเลขก่อน', true);
+        t[d.n] = v;
+      } else if (b.id === 'hrl') {
         // ยังอ่านตาราง REALMS ไม่ได้ = ช่องเลือกว่าง; เขียนลงไปจะได้ realm 0 ทับค่าเดิม
         if (!$('h_realm').options.length) return toast('ยังอ่านตารางขั้นพลังไม่ได้ รอสักครู่แล้วลองใหม่', true);
         const realm = LOC.numOr($('h_realm').value);
         if (realm === null) return toast('เลือกขั้นพลังก่อน', true);
         t.realm = realm;
-        t.layer = LOC.numOr($('h_layer').value) ?? 0;
-        t.qi = LOC.numOr($('h_qi').value) ?? 0;
+        t.layer = LOC.numOrKeep($('h_layer').value, t.layer);
+        t.qi = LOC.numOrKeep($('h_qi').value, t.qi);
         if (t.realm > 0) t.cultivating = true;
-      } else if (d.s) setStat(d.s, +$('s_' + d.s).value || 0);
-      else if (b.id === 'hsa') for (const [k] of STATS) setStat(k, +$('s_' + k).value || 0);
-      else if (d.bset) {
-        const v = Math.max(0, +root.querySelector(`[data-b="${CSS_ESC(d.bset)}"]`).value || 0);
+      } else if (d.s) {
+        const v = LOC.numOr($('s_' + d.s).value);
+        if (v === null) return toast('ใส่ตัวเลขก่อน', true);
+        setStat(d.s, v);
+      } else if (b.id === 'hsa') {
+        // ข้ามช่องที่ว่าง เขียนเฉพาะช่องที่มีค่า; ว่างทั้งหมด = ไม่ทำอะไรและบอกผู้ใช้
+        const filled = STATS.map(([k]) => [k, LOC.numOr($('s_' + k).value)]).filter(([, v]) => v !== null);
+        if (!filled.length) return toast('ใส่ตัวเลขก่อน', true);
+        for (const [k, v] of filled) setStat(k, v);
+      } else if (d.bset) {
+        const n = LOC.numOr(root.querySelector(`[data-b="${CSS_ESC(d.bset)}"]`).value);
+        if (n === null) return toast('ใส่ตัวเลขก่อน', true);
+        const v = Math.max(0, n); // 0 = ลบไอเทม; ตัวเลขติดลบไม่มีความหมาย จึงนับเป็น 0
         (t.bag ??= {}); v ? (t.bag[d.bset] = v) : delete t.bag[d.bset];
       } else if (d.bdel) { delete t.bag[d.bdel]; msg = 'ลบแล้ว'; }
       else if (b.id === 'hadd') {
-        const id = $('hit').value, n = +$('hn').value || 0;
+        const id = $('hit').value, n = LOC.numOr($('hn').value);
         if (!ITEMS?.[id]) return toast('เลือกไอเทมจากรายการก่อน', true);
-        if (n <= 0) return toast('ใส่จำนวนที่มากกว่า 0', true);
+        if (n === null || n <= 0) return toast('ใส่จำนวนที่มากกว่า 0', true);
         (t.bag ??= {})[id] = (t.bag[id] ?? 0) + n;
         msg = `เพิ่ม ${name(id)} ×${n} แล้ว`;
       } else if (b.id === 'hevb') {
