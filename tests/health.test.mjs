@@ -87,3 +87,17 @@ test('health tables live in LOC so the DOM code cannot drift', () => {
   assert.deepEqual(LOC.STATE_REQUIRED, ['money', 'stats', 'ageMonths', 'karma', 'fame', 'bag', 'realm', 'layer', 'qi']);
   assert.deepEqual(LOC.STATE_OPTIONAL, ['martial', 'pending']);
 });
+
+test('simLine: sim พร้อมแล้วบอกจำนวนฟังก์ชันและอีเว้นต์', () => {
+  assert.equal(LOC.simLine({ state: 'ok', funcs: 6, events: 16619 }), '✔ sim (6 ฟังก์ชัน, อีเว้นต์ 16619)');
+});
+
+test('simLine: ยังรอ sim', () => {
+  assert.equal(LOC.simLine({ state: 'waiting' }), '– sim: ยังรอ');
+  assert.equal(LOC.simLine(null), '– sim: ยังรอ');
+});
+
+test('simLine: sim พังบอกเหตุผล และไม่ throw เมื่อไม่มีเหตุผล', () => {
+  assert.equal(LOC.simLine({ state: 'error', reason: 'หา sim ใน app ไม่เจอ' }), '✖ sim: หา sim ใน app ไม่เจอ');
+  assert.equal(LOC.simLine({ state: 'error' }), '✖ sim: ไม่ทราบสาเหตุ');
+});

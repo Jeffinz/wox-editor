@@ -231,7 +231,13 @@
     const simPatch = (names) => ';window.__woxSim={' + ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'].map((k) => k + ':' + names[k]).join(',') + '};';
     // import map สำหรับ app URL เดียว (pure)
     const importMapJson = (appUrl, shimUrl) => JSON.stringify({ imports: { [String(appUrl)]: String(shimUrl) } });
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    // บรรทัดสถานะ sim ในแผงตรวจระบบ (pure, ห้าม throw); ข้อความตามสเปค v3.4.0
+    const simLine = (info) => {
+      if (info?.state === 'ok') return `✔ sim (${info.funcs ?? 6} ฟังก์ชัน, อีเว้นต์ ${info.events ?? 0})`;
+      if (info?.state === 'error') return '✖ sim: ' + (info.reason || 'ไม่ทราบสาเหตุ');
+      return '– sim: ยังรอ';
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
