@@ -135,6 +135,12 @@
     };
     // ค่าที่จะเขียนลงช่องที่ว่างแล้วควรคงค่าเดิม (pure): ช่องว่าง/ไม่ใช่ตัวเลข → ใช้ค่าเดิม (ไม่ใช่ตัวเลข → 0)
     const numOrKeep = (x, prev) => numOr(x) ?? (Number.isFinite(prev) ? prev : 0);
+    // จำนวนไอเทมในกระเป๋าที่จะเขียนลง state (pure, ห้าม throw): จำนวนเต็มไม่ติดลบ, 0 = ลบไอเทม
+    // ช่องว่าง/ไม่ใช่ตัวเลขคืน null เพื่อไม่เขียนทับค่าเดิม; เศษทศนิยมปัดลงเพราะกระเป๋านับเป็นชิ้น (B6)
+    const bagCount = (x) => {
+      const n = numOr(x);
+      return n === null ? null : Math.max(0, Math.floor(n));
+    };
     // ค่าที่จะเขียนลง state จากช่องเลือก (pure, ห้าม throw): ช่องที่ผู้ใช้ยังไม่แตะไม่มีสิทธิ์เขียนทับค่าเดิมของเกม
     // เพราะเบราว์เซอร์เมินค่าที่ไม่มีในรายการ (ตารางสั้นลง/ค่าเกินช่วง) แล้วโชว์ตัวเลือกแรกแทน (A3)
     const pickOrKeep = (shown, current, touched) => (touched ? shown : current);
@@ -317,7 +323,7 @@
       if (!Array.isArray(scores) || scores.length < 2) return false;
       return scores.every((s) => s === scores[0]);
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, pickOrKeep, fieldKey, aiKey, aiNeedsScan, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, bagCount, pickOrKeep, fieldKey, aiKey, aiNeedsScan, fxScore, outScore, hasResult, allTie, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -613,6 +619,7 @@
               <div class="desc" id="hevd" aria-live="polite"></div>
               <button class="b pri wide" id="hevb">เรียกอีเว้นต์นี้</button>
               <p class="hint">หลังเรียก ให้ทำอะไรในเกมสักอย่าง เช่น เปิดเมนูหรือเดินเวลา การ์ดอีเว้นต์จึงจะขึ้น</p>
+              <p class="hint">อีเว้นต์ที่ผูกกับคน (npc) สั่งจากแผงแล้วชื่อในข้อความอาจไม่ครบ เพราะแผงไม่รู้ว่าใครเป็นคนก่อ</p>
             </section>
           </div>
 
@@ -716,7 +723,6 @@
       store.set('tab', k);
       if (k === 'ev' && SIM) drawEvents();
     };
-    showTab(store.get('tab') || 'main');
 
     // ---------- รายการไอเทม / อีเว้นต์ (ค้นหาด้วยชื่อ) ----------
     // ตารางป้ายระดับอยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
@@ -790,6 +796,8 @@
     };
     $('hevq').oninput = drawEvents; $('hevr').onchange = drawEvents;
     $('hevl').onchange = showEv;
+    // เรียกหลังนิยาม drawEvents แล้วเท่านั้น: แท็บที่จำไว้คือ ev และ SIM พร้อมแล้ว showTab จะเรียก drawEvents ทันที (B2)
+    showTab(store.get('tab') || 'main');
 
     // ---------- โหลดตารางข้อมูลจาก chunk ของเกม (เกมแบบ bundle ไม่มี /src/*.js แล้ว) ----------
     // หน้า wiki ใช้ entry อื่น: ห้าม fetch/import chunk ของเกมเลย
@@ -1003,7 +1011,11 @@
       const d = b.dataset;
       if (d.tab) return showTab(d.tab);
       if (b.id === 'hx') return;
-      if (b.id === 'hchkb') return runHealth();
+      // ปุ่มนี้เรียก async โดยไม่ await: ต้องดัก throw เอง ไม่ปล่อยเป็น unhandled rejection (B3)
+      if (b.id === 'hchkb') {
+        runHealth().catch((e) => { console.error('[WoX Editor]', e); $('hchk').textContent = 'ตรวจระบบไม่สำเร็จ — ' + (e?.message ?? e); });
+        return;
+      }
       if (!t) return toast('ยังไม่ได้รับข้อมูลเกม ให้เล่นในเกมสัก 1 เดือนก่อน', true);
       let msg = 'บันทึกแล้ว';
       // คีย์ของช่องที่รอบนี้เขียนลง state จริง: ล้างเฉพาะช่องนั้นออกจาก dirty ช่องอื่นที่พิมพ์ค้างไว้ต้องไม่ถูกเขียนทับ (N1)
@@ -1056,16 +1068,15 @@
         if (!filled.length) return toast('ใส่ตัวเลขก่อน', true);
         for (const [k, v] of filled) { setStat(k, v); saved.add('s_' + k); }
       } else if (d.bset) {
-        const n = LOC.numOr(bagInput(d.bset).value);
-        if (n === null) return toast('ใส่ตัวเลขก่อน', true);
-        const v = Math.max(0, n); // 0 = ลบไอเทม; ตัวเลขติดลบไม่มีความหมาย จึงนับเป็น 0
+        const v = LOC.bagCount(bagInput(d.bset).value); // 0 = ลบไอเทม; ติดลบ/เศษทศนิยมปัดลง (B6)
+        if (v === null) return toast('ใส่ตัวเลขก่อน', true);
         (t.bag ??= {}); v ? (t.bag[d.bset] = v) : delete t.bag[d.bset];
         saved.add('b:' + d.bset);
       } else if (d.bdel) { delete t.bag[d.bdel]; saved.add('b:' + d.bdel); msg = 'ลบแล้ว'; }
       else if (b.id === 'hadd') {
-        const id = $('hit').value, n = LOC.numOr($('hn').value);
+        const id = $('hit').value, n = LOC.bagCount($('hn').value);
         if (!ITEMS?.[id]) return toast('เลือกไอเทมจากรายการก่อน', true);
-        if (n === null || n <= 0) return toast('ใส่จำนวนที่มากกว่า 0', true);
+        if (n === null || n <= 0) return toast('ใส่จำนวนเต็มที่มากกว่า 0', true);
         (t.bag ??= {})[id] = (t.bag[id] ?? 0) + n;
         // ปลดค่าที่พิมพ์ค้างของไอเทมนี้ ไม่งั้นแถวใหม่จะโชว์เลขเก่าที่พิมพ์ไว้ ทั้งที่เพิ่มไปแล้ว (A4)
         saved.add('b:' + id);
@@ -1127,7 +1138,8 @@
     $('ai_auto').checked = store.get('ai.auto') === '1';
     $('ai_delay').value = store.get('ai.delay') || '1200';
     const saveAi = () => { const c = aiCfg(); store.set('ai.preset', c.preset); store.set('ai.mark', c.mark ? '1' : '0'); store.set('ai.auto', c.auto ? '1' : '0'); store.set('ai.delay', String(c.delay)); aiScan(); };
-    for (const id of ['ai_preset', 'ai_mark', 'ai_auto', 'ai_delay']) $(id).addEventListener('change', () => { saveAi(); aiKeyPrev = ''; aiScan(); });
+    // saveAi เรียก aiScan เองแล้ว: ไม่ต้องล้าง aiKeyPrev หรือสแกนซ้ำที่นี่ (B5)
+    for (const id of ['ai_preset', 'ai_mark', 'ai_auto', 'ai_delay']) $(id).addEventListener('change', saveAi);
 
     let lastClicked = null, aiTimer = 0, aiPend = null, aiBest = null;
     // สแกนโดยไม่แตะ DOM ของเกม: ผลไปแสดงในแท็บนี้ ไม่แทรกป้ายเข้าไปในปุ่มของเกม
@@ -1164,7 +1176,8 @@
     function aiScan() {
       const cfg = aiCfg();
       const btns = t?.pending?.kind === 'major' ? [...document.querySelectorAll('#choice-options button[id^="choice-"]')] : [];
-      const sig = btns.length ? [t.pending.id, cfg.preset, cfg.mark, cfg.auto, ...btns.map((b) => b.id)].join('|') : '';
+      // delay อยู่ใน sig ด้วย: แก้ "หน่วงก่อนกด" แล้วต้องตั้งตัวจับเวลาใหม่ด้วยค่าใหม่ (B5)
+      const sig = btns.length ? [t.pending.id, cfg.preset, cfg.mark, cfg.auto, cfg.delay, ...btns.map((b) => b.id)].join('|') : '';
       const key = LOC.aiKey(sig, !!SIM);
       // การ์ด การตั้งค่า สถานะ sim และตัวปุ่มยังชุดเดิม = ไม่ต้องคำนวณใหม่
       if (!LOC.aiNeedsScan(key, aiKeyPrev, btns, aiBtns)) return;
@@ -1206,7 +1219,7 @@
         rows.push({ b, sc: p * okS + (1 - p) * fs, p, blind: !known0 });
       }
       const known = rows.filter((r) => r.sc !== null);
-      if (!known.length) { aiOut.textContent = ''; return; }
+      if (!known.length) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; aiBest = null; return; }
       const scored = known.filter((r) => !r.blind);
       // คะแนนเท่ากันหมด = ไม่มีตัวไหนดีกว่า จึงไม่กดอัตโนมัติ และไม่ติดดาวให้ตัวแรก
       const tie = LOC.allTie(scored.map((r) => r.sc));
