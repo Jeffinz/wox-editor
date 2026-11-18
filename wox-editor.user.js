@@ -1084,6 +1084,10 @@
     // ตารางและฟิลด์ state อยู่ใน LOC แล้ว (เทสเรียกได้) ที่นี่ใช้ชื่อเดิมชี้ไปที่ค่าเดียวกัน
     const TABLES = LOC.TABLES;
     const statKeys = STATS.map(([k]) => k);
+    // สถานะ sim สำหรับแผงตรวจระบบ: ok เมื่อมี SIM, error เมื่อรู้เหตุผล, ไม่งั้นยังรอ
+    const simInfo = () => SIM
+      ? { state: 'ok', funcs: 6, events: SIM.allMajors().length }
+      : { state: simError ? 'error' : 'waiting', reason: simError };
     const runHealth = async () => {
       // ตรวจ state ก่อน เพราะทำได้ทันทีโดยไม่ต้องรอ chunk
       const state = LOC.stateLines(t, statKeys);
@@ -1097,7 +1101,8 @@
       lines.push(c?.build ? `✔ BUILD ${c.build} (/src/build.js)` : '✖ BUILD: อ่าน /src/build.js ไม่ได้');
       // ตารางที่ยังไม่รู้ (chunk โหลดไม่ครบ / state ยังไม่มา) ต้องขึ้น "–" ไม่ใช่ "✖" (LOC.tableLines ตัดสินให้)
       lines.push(...LOC.tableLines(c));
-      lines.push('– ' + LOC.EV_UNSUPPORTED);
+      await Promise.race([simReady, new Promise((r) => setTimeout(r, 2000))]); // ให้ sim มีโอกาสมาถึงก่อนสรุป
+      lines.push(LOC.simLine(simInfo()));
       show([...lines, ...state]);
     };
     // ตรวจการอัปเดต: ใช้ build กับชื่อ chunk จาก loadCore() เทียบกับฐานใน localStorage
@@ -1111,11 +1116,13 @@
         $('hupd').textContent = c?.build ? 'ตรวจการอัปเดตไม่ได้: อ่าน chunk หลักไม่ได้' : 'ตรวจการอัปเดตไม่ได้: อ่าน BUILD จาก /src/build.js ไม่ได้';
         return;
       }
-      const found = {};
-      for (const [, key] of TABLES) found[key] = !!c[key];
-      const cur = { build: c.build, chain: { boot: c.boot, app: c.app, core: c.core }, found };
       let prev = null;
       try { prev = JSON.parse(store.get('manifest') || 'null'); } catch { /* ใช้ค่าใหม่ */ }
+      const found = {};
+      for (const [, key] of TABLES) found[key] = !!c[key];
+      // sim ยังไม่รู้ผล = คงค่าฐานเดิมไว้ ไม่เขียน false ทับ (กันแจ้ง "หาย" ทั้งที่แค่ยังไม่มา)
+      found.sim = SIM ? true : simError ? false : !!prev?.found?.sim;
+      const cur = { build: c.build, chain: { boot: c.boot, app: c.app, core: c.core }, found };
       store.set('manifest', JSON.stringify(cur));
       const { changed, lost } = LOC.diffManifest(prev, cur);
       // manifest รูปแบบเก่า (มี files) หรือค่าที่ parse ได้แต่ไม่ใช่ object ถือว่าไม่มีฐาน
