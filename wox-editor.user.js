@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.4.9
+// @version      3.4.10
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -327,7 +327,7 @@
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.4.9'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.4.10'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
