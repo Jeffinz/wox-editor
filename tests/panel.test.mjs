@@ -22,3 +22,10 @@ test('isStateField: เฉพาะช่องที่ fresh() เขียน
   for (const f of [{ id: 'hm' }, { id: 'h_karma' }, { id: 'h_mrank' }, { id: 's_body' }, { b: 'woodSword' }, { id: '', b: 'x' }]) assert.equal(LOC.isStateField(f), true, JSON.stringify(f));
   for (const f of [{ id: 'hq' }, { id: 'hqr' }, { id: 'hn' }, { id: 'hmb' }, { id: 'hmr' }, { id: 'ai_mark' }, { id: '' }, {}, null, undefined]) assert.equal(LOC.isStateField(f), false, JSON.stringify(f));
 });
+
+test('aiKey: sig เดิมและ sim สถานะเดิมต้องเท่ากัน, sim มาใหม่ต้องไม่เท่า', () => {
+  assert.equal(LOC.aiKey('a|b', true), LOC.aiKey('a|b', true));
+  assert.notEqual(LOC.aiKey('a|b', false), LOC.aiKey('a|b', true));
+  assert.notEqual(LOC.aiKey('a|b', true), LOC.aiKey('a|c', true));
+  assert.equal(LOC.aiKey('', false), '0|');
+});

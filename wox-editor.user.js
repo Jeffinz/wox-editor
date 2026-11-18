@@ -132,6 +132,8 @@
     // ช่องที่ fresh() เขียนค่าจากเกมลงไป (pure, ห้าม throw): ผู้ใช้พิมพ์ในช่องพวกนี้แล้วยังไม่บันทึก รอบรีเฟรชต้องไม่ทับ
     // ช่องค้นหา/กรอง/ช่วยเลือกไม่นับ เพราะ fresh() ไม่แตะ
     const isStateField = (f) => f?.b != null || f?.id === 'hm' || /^(h_|s_)/.test(String(f?.id ?? ''));
+    // คีย์จำผลสแกนของการ์ด (pure): เปลี่ยนเมื่อการ์ด/การตั้งค่าเปลี่ยน หรือเมื่อ sim เพิ่งมาถึง
+    const aiKey = (sig, simOn) => (simOn ? '1' : '0') + '|' + String(sig ?? '');
     // URL สัมบูรณ์ของ chunk (pure): path เต็มมาจาก boot file เอง จึงไม่ต้องประกอบโฟลเดอร์เอง
     // ต้องตรงกับ URL ที่เกมใช้ทุกตัวอักษรเพื่อให้ได้ module instance เดิม
     const chunkUrl = (p, origin) => new URL(p, origin).href;
@@ -241,7 +243,7 @@
       if (info?.state === 'error') return '✖ sim: ' + (info.reason || 'ไม่ทราบสาเหตุ');
       return '– sim: ยังรอ';
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, isStateField, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, isStateField, aiKey, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -997,13 +999,13 @@
     $('ai_auto').checked = store.get('ai.auto') === '1';
     $('ai_delay').value = store.get('ai.delay') || '1200';
     const saveAi = () => { const c = aiCfg(); store.set('ai.preset', c.preset); store.set('ai.mark', c.mark ? '1' : '0'); store.set('ai.auto', c.auto ? '1' : '0'); store.set('ai.delay', String(c.delay)); aiScan(true); };
-    for (const id of ['ai_preset', 'ai_mark', 'ai_auto', 'ai_delay']) $(id).addEventListener('change', () => { saveAi(); aiSig = ''; aiScan(); });
+    for (const id of ['ai_preset', 'ai_mark', 'ai_auto', 'ai_delay']) $(id).addEventListener('change', () => { saveAi(); aiKeyPrev = ''; aiScan(); });
 
     let lastClicked = null, aiTimer = 0, aiPend = null;
     // สแกนโดยไม่แตะ DOM ของเกม: ผลไปแสดงในแท็บนี้ ไม่แทรกป้ายเข้าไปในปุ่มของเกม
     // (เดิมแทรกป้ายแล้ว observer ทั้งหน้าสแกนซ้ำทุกเฟรม ทำให้เกมกระตุกและคลิกหาย)
     const aiOut = $('ai_out');
-    let aiSig = '', aiBadges = [];
+    let aiKeyPrev = '', aiBadges = [];
     // ป้ายแนะนำวางทับข้างปุ่มบนการ์ด: อยู่ใน shadow root ของเราเอง จึงไม่แตะ DOM ของเกม และ observer ไม่เห็น
     // pointer-events: none ทำให้คลิกปุ่มของเกมได้ตามปกติ
     function placeBadges() {
@@ -1035,14 +1037,17 @@
       const cfg = aiCfg();
       const btns = t?.pending?.kind === 'major' ? [...document.querySelectorAll('#choice-options button[id^="choice-"]')] : [];
       const sig = btns.length ? [t.pending.id, cfg.preset, cfg.mark, cfg.auto, ...btns.map((b) => b.id)].join('|') : '';
-      if (sig === aiSig) return; // การ์ดและการตั้งค่าไม่เปลี่ยน ไม่ต้องคำนวณใหม่
+      const key = LOC.aiKey(sig, !!SIM);
+      if (key === aiKeyPrev) return; // การ์ด การตั้งค่า และสถานะ sim ไม่เปลี่ยน ไม่ต้องคำนวณใหม่
+      aiKeyPrev = key;
       aiBadges = [];
-      if (!sig) { aiSig = ''; aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; return; }
-      // ยังไม่พร้อม (sim ยังโหลดไม่เสร็จ / ไม่มีอีเว้นต์) ต้องไม่จำ sig ไว้ ไม่งั้นจะไม่สแกนอีกจนการ์ดเปลี่ยน
+      if (!sig) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; return; }
+      // ยังไม่พร้อม (sim ยังโหลดไม่เสร็จ / ปิดทั้งป้ายและกดอัตโนมัติ) ไม่ต้องคำนวณ — คีย์ผูกกับ !!SIM แล้ว
+      // รอบที่ sim มาถึงจึงเป็นคีย์ใหม่และสแกนซ้ำเอง
       if (!SIM?.majorEvent || (!cfg.mark && !cfg.auto)) { aiOut.textContent = ''; clearTimeout(aiTimer); aiPend = null; return; }
       const ev = SIM.majorEvent(t.pending.id);
+      // sim รู้จัก sim แต่ไม่รู้จักอีเว้นต์นี้: จำคีย์ไว้ ไม่สแกนซ้ำจนการ์ดเปลี่ยน (C2)
       if (!ev) { aiOut.textContent = ''; return; }
-      aiSig = sig;
       const W = WEIGHTS[cfg.preset] ?? WEIGHTS.balanced;
       let opts = ev.options ?? [];
       try { const mt = SIM.majorTexts?.(t); if (mt?.options?.length) opts = mt.options; } catch { /* ใช้ตัวเลือกดิบ */ }
