@@ -145,6 +145,9 @@
       for (const k of ['realms', 'martialRanks', 'tiers', 'items']) out[k] = next?.[k] ?? prev?.[k] ?? null;
       return out;
     };
+    // แผงเก่าของสคริปต์เราที่ควรถูกลบหรือไม่ (pure): ต้องเป็น div ลูกตรงของ body ที่มี shadow root
+    // ตัวระบุคือ aria-label ของ .w#w ซึ่งมีทุกรุ่นตั้งแต่ v3.0.0 ถึง v3.3.1; ข้อความในเนื้อหาไม่นับ (ของคนอื่นอาจมีคำเดียวกัน)
+    const isStalePanel = (info) => !!info && info.tag === 'DIV' && info.hasShadow === true && info.ours !== true && info.label === 'WoX Editor';
     // ข้อความเดียวของแท็บอีเว้นต์/ช่วยเลือกเมื่อยังไม่รองรับเกมแบบ bundle (ทุกจุดที่พูดเรื่องนี้ใช้ค่านี้)
     const EV_UNSUPPORTED = 'อีเว้นต์/ช่วยเลือก: ยังไม่รองรับเกมแบบ bundle';
     // ตารางที่สคริปต์ใช้: ชื่อที่แสดงในแผง + คีย์ในผลของ loadCore() (ตรวจระบบกับตรวจอัปเดตอ่านชุดเดียวกัน)
@@ -178,7 +181,7 @@
       out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
       return out;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -191,7 +194,10 @@
   // จับ state ตอนเกมเซฟ (ต้องเกิดอย่างน้อย 1 ครั้ง)
   const orig = JSON.stringify;
   JSON.stringify = function (o, r, s) {
-    if (o && typeof o === 'object' && 'money' in o && 'stats' in o && 'ageMonths' in o) t = o;
+    // ต้องไม่ทำให้เกมพัง: proxy หรือ object แปลกที่ прибор 'in' แล้ว throw ให้ข้ามการจับ state
+    let hit = false;
+    try { hit = !!o && typeof o === 'object' && 'money' in o && 'stats' in o && 'ageMonths' in o; } catch { hit = false; }
+    if (hit) t = o;
     return orig.call(this, o, r, s);
   };
 
@@ -315,6 +321,7 @@
 
   addEventListener('DOMContentLoaded', () => {
     const host = document.createElement('div');
+    host.dataset.woxed = VERSION; // แผงรุ่นหลังรู้จักกันด้วยค่านี้ ไม่ต้องอ่านเนื้อหา shadow root
     const root = host.attachShadow({ mode: 'open' });
     const $ = (id) => root.getElementById(id);
     root.innerHTML = `
@@ -429,11 +436,16 @@
       });
     }
     document.body.appendChild(host);
-    // สคริปต์รุ่นเก่าที่ยังค้างอยู่ใน Tampermonkey จะวาดแผงซ้อนทับ จึงลบแผง WoX อื่นที่ไม่ใช่ของเรา
+    // สคริปต์รุ่นเก่า (v3.0.0-3.3.1) ที่ยังค้างอยู่ใน Tampermonkey จะวาดแผงซ้อนทับ จึงลบเฉพาะแผงของรุ่นนั้น
+    // ตัวระบุ: div ลูกตรงของ body + มี shadow root + .w#w aria-label="WoX Editor" (ไม่ใช้ข้อความในเนื้อหา เพราะอาจลบของคนอื่น)
     // (เฝ้าเฉพาะลูกตรงของ body เพื่อจับแผงที่มาทีหลัง; การลบไม่ทำให้เกิดการวนซ้ำ)
     const dropStalePanels = () => {
-      for (const d of document.body.children) {
-        if (d !== host && d.shadowRoot?.textContent.includes('WoX Editor')) d.remove();
+      for (const d of Array.from(document.body.children)) {
+        const info = {
+          tag: d.tagName, hasShadow: !!d.shadowRoot, ours: d === host || 'woxed' in d.dataset,
+          label: d.shadowRoot?.querySelector('#w')?.getAttribute('aria-label') ?? null,
+        };
+        if (LOC.isStalePanel(info)) d.remove();
       }
     };
     dropStalePanels();
