@@ -190,7 +190,48 @@
       out.push(t.pending ? `✔ pending: ${t.pending.kind} ${t.pending.id}` : '– pending: ไม่มีอีเว้นต์ค้าง');
       return out;
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines };
+    const SIM_KEYS = ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'];
+    // ชื่อย่อของ sim ใน app chunk (pure, ห้าม throw, ห้ามอ้างตัวแปรนอกตัวฟังก์ชัน: shim ฝังด้วย toString)
+    // รูปร่างมาจาก tools/locate-sim.mjs (พิสูจน์กับ 3 build); ต้องเจอชื่อละ 1 ที่ประกาศ ไม่งั้นคืน null
+    const simNames = (src) => {
+      const s = typeof src === 'string' ? src : '';
+      const id = '[A-Za-z0-9_$]+';
+      const esc = (x) => x.replace(/\$/g, '\\$');
+      const one = (re) => {
+        const all = [...s.matchAll(re)];
+        return all.length === 1 ? all[0][1] : null;
+      };
+      // รายชื่อคีย์ต้องประกาศในฟังก์ชันนี้เอง เพราะ shim ฝัง simNames ด้วย toString แล้วไม่มีตัวแปรนอกฟังก์ชันให้อ้าง
+      const keys = ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'];
+      const mt = s.match(new RegExp('function (' + id + ')\\(e,t=(' + id + ')\\(e\\.pending\\?\\.id\\),n=e\\.pending\\?\\.npc\\)'));
+      if (!mt) return null;
+      const out = { majorTexts: mt[1], majorEvent: mt[2] };
+      out.events = one(new RegExp('[,; ]' + esc(out.majorEvent) + '=e=>(' + id + ')\\.get\\(e\\)', 'g'));
+      out.rarityFor = one(new RegExp('(' + id + ')=e=>e\\.story\\?' + id + '\\(' + id + '\\.get\\(e\\.story\\)\\):' + id + '\\(e\\)', 'g'));
+      out.openOptions = one(new RegExp('[,; ](' + id + ')=\\(e,t\\)=>\\{let n=t\\.options\\.filter\\(', 'g'));
+      // statOdds: หา call site ของข้อความ "small","odds" แล้วไล่ chain ${a(b(c( — ไม่ผูกกับชื่อ helper แปลภาษา
+      out.statOdds = one(new RegExp(id + '\\("small","odds",""\\)[^]{0,250}?\\$\\{' + id + '\\(' + id + '\\(' + '(' + id + ')' + '\\(', 'g'));
+      for (const k of keys) {
+        if (!out[k]) return null;
+        // ต้องมีที่ประกาศเดียว: function X( หรือ X=... (ตัด ==/===/=> ที่ไม่ใช่การประกาศออก)
+        const defs = [...s.matchAll(new RegExp('(?:function\\s+' + esc(out[k]) + '\\s*\\(|' + esc(out[k]) + '\\s*=[^=>])', 'g'))];
+        if (defs.length !== 1) return null;
+      }
+      return out;
+    };
+    // เขียน specifier สัมพัทธ์ "…from\"./" "…import\"./" "…import(\"./" เป็น URL เต็ม (pure, ห้าม throw)
+    // "./" ที่ไม่ตามหลัง from/import ต้องไม่ถูกแตะ
+    const absolutize = (src, base) => {
+      const s = typeof src === 'string' ? src : '';
+      let n = 0;
+      const out = s.replace(/((?:\bfrom|\bimport)\s*\(?\s*)"\.\//g, (m, head) => { n++; return head + '"' + base; });
+      return { src: out, n };
+    };
+    // บรรทัดเปิด sim ต่อท้าย app module (pure; รายชื่อคีย์ในฟังก์ชันเองเพราะ shim ฝังด้วย toString)
+    const simPatch = (names) => ';window.__woxSim={' + ['majorTexts', 'majorEvent', 'events', 'rarityFor', 'openOptions', 'statOdds'].map((k) => k + ':' + names[k]).join(',') + '};';
+    // import map สำหรับ app URL เดียว (pure)
+    const importMapJson = (appUrl, shimUrl) => JSON.stringify({ imports: { [String(appUrl)]: String(shimUrl) } });
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, numOrKeep, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
