@@ -35,6 +35,15 @@ test('numOrKeep keeps the old value for empty or bad input', () => {
   assert.equal(LOC.numOrKeep('', undefined), 0);
 });
 
+test('bagCount: จำนวนในกระเป๋าต้องเป็นจำนวนเต็มไม่ติดลบ (B6)', () => {
+  assert.equal(LOC.bagCount('3'), 3);
+  assert.equal(LOC.bagCount('2.9'), 2); // เศษทศนิยมปัดลง: กระเป๋านับเป็นชิ้น
+  assert.equal(LOC.bagCount('-4'), 0); // 0 = ลบไอเทม
+  assert.equal(LOC.bagCount(''), null); // ว่าง = ไม่เขียนทับค่าเดิม
+  assert.equal(LOC.bagCount('abc'), null);
+  assert.equal(LOC.bagCount(7), 7);
+});
+
 test('pickOrKeep: ช่องเลือกที่ผู้ใช้ไม่ได้แตะและแสดงค่าคนละตัวกับ state ต้องคงค่าเดิม (A3)', () => {
   // เบราว์เซอร์เมินค่าที่ไม่มีในรายการแล้วโชว์ตัวเลือกแรก: ค่าที่อ่านได้จึงไม่ใช่ค่าของ state
   assert.equal(LOC.pickOrKeep(0, 4, false), 4);
