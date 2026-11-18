@@ -101,13 +101,14 @@ test('tierOf อ่าน tier ที่เป็นสตริงตัวเ�
   assert.deepEqual(LOC.tierOf({ tier: '0' }, [{ th: 'ทดสอบ', en: 'Test', color: '#123456' }]), ['ทดสอบ', '#123456']);
 });
 
-test('tierIdx: ตัวเลขคงเดิม, สตริงตัวเลขนับเป็นตัวเลข, ระดับที่จับคู่ไม่ได้ได้ null', () => {
+test('tierIdx: ตัวเลขคงเดิม, สตริงตัวเลขนับเป็นตัวเลข, สตริงระดับได้ index, ระดับที่จับคู่ไม่ได้ได้ null', () => {
   assert.equal(LOC.tierIdx(0), 0);
   assert.equal(LOC.tierIdx(9), 5);
   assert.equal(LOC.tierIdx('3'), 3);
   assert.equal(LOC.tierIdx(undefined), 0);
   assert.equal(LOC.tierIdx(null), 0);
-  assert.equal(LOC.tierIdx('legendary'), null);
+  assert.equal(LOC.tierIdx('legendary'), 4);
+  assert.equal(LOC.tierIdx('weird'), null);
 });
 
 test('numOr: ค่าว่างหรือไม่ใช่จำนวนจริงคืน null', () => {

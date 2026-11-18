@@ -86,12 +86,29 @@
       if (row && typeof row.th === 'string' && typeof row.color === 'string') return [row.th, row.color];
       return TIER_LBL[Math.min(5, tier)] ?? TIER_LBL[0];
     };
+    // ลำดับระดับสตริงของไอเทม (ชื่อตรงกับ RAR_LBL); ย้ายจากฝั่ง DOM มาไว้ที่เดียวเพื่อให้เทสได้
+    const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
     // ลำดับชั้นของไอเทมสำหรับกรอง/เรียง (pure): ตัวเลขหรือสตริงตัวเลข → 0-5 (เหมือนเดิม), ไม่มีค่า → 0
-    // สตริงที่ไม่ใช่ตัวเลขจับคู่แถว TIERS ไม่ได้ → null: ต้องเห็นได้ทุกตัวกรองและอยู่ท้ายรายการ
+    // สตริงระดับ (เช่น "epic") → index 0-4 ของ RAR_ORDER
+    // สตริงอื่นที่จับคู่ไม่ได้ → null: ต้องเห็นได้ทุกตัวกรองและอยู่ท้ายรายการ
     const tierIdx = (tier) => {
       const raw = tier ?? 0;
+      if (typeof raw === 'string' && RAR_ORDER.includes(raw)) return RAR_ORDER.indexOf(raw);
       const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
       return Number.isFinite(n) ? Math.min(5, n) : null;
+    };
+    // ตัวเรียงไอเทม (pure, ห้าม throw): ระดับสูงก่อน → ระดับที่รู้ไม่ได้อยู่ท้าย → ชื่อช่อง
+    // slot อาจไม่ใช่สตริงหรือไม่มีเลย จึงต้องแปลงด้วย String เสมอ (ของเดิมเรียก slot.localeCompare ตรง ๆ แล้ว throw)
+    const itemOrder = (a, b) => {
+      const x = tierIdx(a?.tier), y = tierIdx(b?.tier);
+      const slot = (i) => String(i?.slot ?? '');
+      if (x === null || y === null) return (x === null) - (y === null) || slot(a).localeCompare(slot(b));
+      return y - x || slot(a).localeCompare(slot(b));
+    };
+    // ไอเทมผ่านตัวกรองระดับไหม (pure): "all" ผ่านหมด, ระดับที่รู้ไม่ได้ผ่านทุกตัวกรอง (เหมือนของเดิม)
+    const tierMatches = (item, filter) => {
+      const k = tierIdx(item?.tier);
+      return filter === 'all' || k === null || String(k) === filter;
     };
     // อ่านค่าตัวเลขจากช่องกรอก (pure): คืน null เมื่อว่างหรือไม่ใช่จำนวนจริง เพื่อไม่ให้เขียน 0 ทับค่าเดิม
     const numOr = (x) => {
@@ -119,7 +136,7 @@
     };
     // อ่าน chunk หลักได้จริงหรือยัง (pure): มี build แต่ core ว่างหรือ import ไม่ครบ = ยังไม่ได้อ่าน ห้ามลงว่าตารางหาย
     const coreLoaded = (c) => Array.isArray(c?.core) && c.core.length > 0 && c.imported === true;
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, tierOf, tierIdx, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
@@ -444,11 +461,10 @@
     const RAR_LBL = LOC.RAR_LBL;
     const rarDot = (c) => `<i class="rdot" style="background:${c}"></i>`;
     const itemRar = (i) => LOC.tierOf(i, TIERS);
-    const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+    const RAR_ORDER = LOC.RAR_ORDER;
     const evKey = (e) => { try { return SIM?.rarityFor?.(e) ?? 'common'; } catch { return 'common'; } };
     const evRar = (e) => RAR_LBL[evKey(e)] ?? RAR_LBL.common;
     // ลำดับชั้นของไอเทม: ใช้ LOC.tierIdx (null = จับคู่แถว TIERS ไม่ได้)
-    const tierIdx = (i) => LOC.tierIdx(i?.tier);
     // ตัวเลือกระดับความหายากในช่องกรอง (ค่า "all" = ทุกระดับ)
     $('hqr').innerHTML = '<option value="all">ทุกระดับ</option>' + TIER_LBL.map(([n], k) => `<option value="${k}">${n}</option>`).join('');
     $('hevr').innerHTML = '<option value="all">ทุกระดับ</option>' + RAR_ORDER.map((k) => `<option value="${k}">${RAR_LBL[k][0]}</option>`).join('');
@@ -457,12 +473,8 @@
       const q = norm($('hq').value).trim(), r = $('hqr').value;
       // เรียงหายากก่อน (ขั้นสูงไปต่ำ) แล้วตามประเภทช่อง; ไอเทมที่รู้ระดับไม่ได้อยู่ท้ายและเห็นได้ทุกตัวกรอง
       const hit = itemList
-        .filter((i) => (r === 'all' || tierIdx(i) === null || String(tierIdx(i)) === r) && (!q || norm(i.th).includes(q) || norm(i.en).includes(q) || norm(i.id).includes(q)))
-        .sort((a, b) => {
-          const x = tierIdx(a), y = tierIdx(b);
-          if (x === null || y === null) return (x === null) - (y === null) || a.slot.localeCompare(b.slot);
-          return y - x || a.slot.localeCompare(b.slot);
-        });
+        .filter((i) => LOC.tierMatches(i, r) && (!q || norm(i.th).includes(q) || norm(i.en).includes(q) || norm(i.id).includes(q)))
+        .sort(LOC.itemOrder);
       $('hit').innerHTML = hit.slice(0, 300).map((i) => `<option value="${esc(i.id)}">[${esc(itemRar(i)[0])}] ${esc(i.th)}  ·  ${esc(i.slot)}</option>`).join('');
       if ($('hit').options.length) $('hit').selectedIndex = 0;
       $('hqn').textContent = hit.length ? `พบ ${hit.length} รายการ${hit.length > 300 ? ' (แสดง 300 รายการแรก)' : ''}` : 'ไม่พบไอเทมที่ตรงกับคำค้น ลองใช้คำสั้นลง';
@@ -590,7 +602,7 @@
         ITEMS = c.items;
         // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
         itemList = Object.getOwnPropertyNames(ITEMS).map((k) => ITEMS[k]).filter((i) => i && i.id)
-          .sort((a, b) => a.slot.localeCompare(b.slot) || (a.tier ?? 0) - (b.tier ?? 0));
+          .sort(LOC.itemOrder);
         drawItems();
       } else $('hqn').textContent = ITEMS_FAIL;
       // majors.js/sim.js ไม่มีในเกมแบบ bundle แล้ว จึงไม่ import (จะได้ 404)
