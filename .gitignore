@@ -4,3 +4,5 @@ snapshots/
 index.html
 bundle/
 journal/
+# worktree ชั่วคราวของงานแต่ละงาน (git worktree add .worktrees/<ชื่อ>)
+.worktrees/

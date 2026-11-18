@@ -1,5 +1,7 @@
 # Task 5 spike: อีเว้นต์และช่วยเลือกในเกมแบบ bundle
 
+> หมายเหตุ 2026-11-18: offset และชื่อ chunk ในไฟล์นี้เป็นของ build `mwkobenp` ใช้กับ `mwlh9q9f` ไม่ได้ ตัวชี้วัดเชิงโครงสร้าง (`#choice-options`, `weight:.55`, `gap:480`) ยังใช้ได้
+
 วันที่ 2026-11-17 · branch `wip/bundle-fetch` · BUILD ที่ตรวจ `mwkobenp` (`bundle/mwkobenp/src/build.js`)
 
 เอกสารนี้เป็นผลการค้นเท่านั้น ไม่มีโค้ดเปลี่ยน รอเจ้าของโปรเจกต์ตัดสินใจ
