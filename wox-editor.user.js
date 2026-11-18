@@ -136,13 +136,22 @@
     };
     // อ่าน chunk หลักได้จริงหรือยัง (pure): มี build แต่ core ว่างหรือ import ไม่ครบ = ยังไม่ได้อ่าน ห้ามลงว่าตารางหาย
     const coreLoaded = (c) => Array.isArray(c?.core) && c.core.length > 0 && c.imported === true;
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded };
+    // รวมตารางของรอบใหม่กับของเดิม (pure, ห้าม throw): คีย์ที่รอบใหม่เป็น null ให้คงของเดิมไว้
+    // กันตารางที่อ่านได้แล้วหายไปตอนกด "ตรวจอีกครั้ง" แล้วรอบสองโหลดได้ไม่ครบ
+    const keepTables = (prev, next) => {
+      const out = {};
+      for (const k of ['realms', 'martialRanks', 'tiers', 'items']) out[k] = next?.[k] ?? prev?.[k] ?? null;
+      return out;
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, numOr, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
   const VERSION = '3.3.1'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, MJ = null, EVENTS = [];
+  // tables = ตารางที่อ่านได้สะสมข้ามรอบ (F2); chainCache = ชื่อ chunk ที่หาได้แล้ว ใช้ข้าม fetch สามไฟล์ตอน retry (R2)
+  let tables = null, chainCache = null;
 
   // จับ state ตอนเกมเซฟ (ต้องเกิดอย่างน้อย 1 ครั้ง)
   const orig = JSON.stringify;
@@ -548,13 +557,19 @@
       } catch { /* ไม่มี BUILD ก็ไม่เป็นไร */ }
       if (!(await waitState())) return out;
       try {
-        const idx = await text('/');
-        const bootPath = LOC.chunkChain(idx, '', '').boot;
-        if (!bootPath) return out;
-        const bootText = await text(bootPath);
-        const appPath = LOC.chunkChain(idx, bootText, '').app;
-        if (!appPath) return out;
-        const chain = LOC.chunkChain(idx, bootText, await text(appPath));
+        // ชื่อ chunk ไม่เปลี่ยนตลอดอายุหน้า จึงจำ chain ที่หาได้ครบแล้วไว้ กัน fetch /, boot, app ซ้ำตอนกด "ตรวจอีกครั้ง"
+        // import chunk ซ้ำไม่เสียเครือข่าย เพราะเบราว์เซอร์ใช้ module cache อยู่แล้ว
+        let chain = chainCache;
+        if (!chain) {
+          const idx = await text('/');
+          const bootPath = LOC.chunkChain(idx, '', '').boot;
+          if (!bootPath) return out;
+          const bootText = await text(bootPath);
+          const appPath = LOC.chunkChain(idx, bootText, '').app;
+          if (!appPath) return out;
+          chain = LOC.chunkChain(idx, bootText, await text(appPath));
+          if (chain.app && chain.core.length > 0) chainCache = chain;
+        }
         out.boot = chain.boot;
         out.app = chain.app;
         out.core = chain.core;
@@ -589,19 +604,21 @@
     const ITEMS_FAIL = 'โหลดรายการไอเทมไม่ได้ ลองรีโหลดหน้าเกม หรือเกมเปลี่ยนโครงสร้างไอเทม ดูแผงตรวจระบบ';
     const renderCore = (c) => {
       if (isWiki()) return;
-      if (c.realms) {
-        REALMS = c.realms;
+      // รวมกับตารางรอบก่อน: รอบนี้ที่โหลดไม่ครบต้องไม่ทำให้ตารางที่อ่านได้แล้วหาย (F2)
+      tables = LOC.keepTables(tables, c);
+      if (tables.realms) {
+        REALMS = tables.realms;
         $('h_realm').innerHTML = REALMS.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)} (${r.layers} ชั้น)</option>`).join('');
       }
-      if (c.martialRanks) {
-        $('h_mrank').innerHTML = c.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
+      if (tables.martialRanks) {
+        $('h_mrank').innerHTML = tables.martialRanks.map((r, i) => `<option value="${i}">${i}: ${esc(r.th)}</option>`).join('');
       }
       // ต้องตั้ง TIERS ก่อน drawItems() เพราะรายการไอเทมอ่านป้ายระดับจากตารางของเกม
-      TIERS = c.tiers;
-      if (c.items) {
-        ITEMS = c.items;
+      TIERS = tables.tiers;
+      if (tables.items) {
+        ITEMS = tables.items;
         // คัมภีร์วิชาเป็น non-enumerable จึงต้องใช้ getOwnPropertyNames
-        itemList = Object.getOwnPropertyNames(ITEMS).map((k) => ITEMS[k]).filter((i) => i && i.id)
+        itemList = Object.getOwnPropertyNames(tables.items).map((k) => tables.items[k]).filter((i) => i && i.id)
           .sort(LOC.itemOrder);
         drawItems();
       } else $('hqn').textContent = ITEMS_FAIL;
@@ -610,15 +627,22 @@
       fresh(true);
     };
     // promise เดียวใช้ร่วมกันทั้งวาดแผง ตรวจระบบ และตรวจอัปเดต: fetch index/boot/app ครั้งเดียวต่อรอบ
-    // ถ้าผลออกมาไม่ครบ (fetch ล้ม หรือ state ยังไม่มา) ให้ล้าง promise เพื่อให้กด "ตรวจอีกครั้ง" ลองใหม่ได้
-    // ตัวจัดการนี้รับเฉพาะ promise ของ loadCore; บั๊กตอนวาดแผงต้องโผล่ใน console ไม่ใช่ถูกกลืนเป็นข้อความนี้
+    // ถ้าผลออกมาไม่ครบ (fetch ล้ม หรือ state ยังไม่มา) หรือวาดแผง throw ให้ล้าง promise เพื่อให้กด "ตรวจอีกครั้ง" ลองใหม่ได้
+    // บั๊กตอนวาดแผงต้องโผล่ใน console (ไม่ใช่ถูกกลืนเป็นข้อความในแผง) แต่ต้องไม่ทำให้ปุ่มตรวจอีกครั้งตาย
     let corePromise = null;
     const startCore = () => {
       const p = loadCore();
       corePromise = p;
       p.then((c) => {
-        renderCore(c); // วาดเท่าที่ได้ (renderCore จัดการตารางที่ไม่มาเอง)
-        if (!LOC.coreLoaded(c) && corePromise === p) corePromise = null; // ผลไม่ครบ: รอบหน้าตรวจใหม่ได้
+        const done = LOC.coreLoaded(c); // ตัดสินใจก่อนวาด: renderCore อาจ throw
+        let failed = false;
+        try {
+          renderCore(c); // วาดเท่าที่ได้ (renderCore จัดการตารางที่ไม่มาเอง)
+        } catch (e) {
+          failed = true;
+          console.error('[WoX Editor]', e);
+        }
+        if ((!done || failed) && corePromise === p) corePromise = null; // ผลไม่ครบ/วาดพลาด: รอบหน้าตรวจใหม่ได้
       }, () => {
         if (corePromise === p) corePromise = null;
         $('hqn').textContent = ITEMS_FAIL;
