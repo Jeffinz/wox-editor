@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         WoX Single-player Editor
-// @version      3.4.3
+// @version      3.4.4
 // @updateURL    https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @downloadURL  https://raw.githubusercontent.com/Jeffinz/wox-editor/main/wox-editor.user.js
 // @match        https://way-of-xian.wox-game.workers.dev/*
@@ -248,11 +248,42 @@
       if (info?.state === 'error') return '✖ sim: ' + (info.reason || 'ไม่ทราบสาเหตุ');
       return '– sim: ยังรอ';
     };
-    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, isStateField, aiKey, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
+    // ---------- ให้คะแนนตัวเลือกบนการ์ดอีเว้นต์ (pure, ห้าม throw) ----------
+    // act ครอบจักรวาลตามแต่ละอีเว้นต์ (marry, travelTo, seize, ...) จึงไม่รู้เครื่องหมายของมัน
+    // ให้ 0 ยกเว้นคีย์ที่บ่งชี้อันตราย ซึ่งติดลบหนัก ตัวนี้จึงไม่แต่งความหมายของเกมขึ้นเอง
+    const DANGER_ACT = /die|death|kill|dead|perish/i;
+    const fxScore = (fx, W, statKeys) => {
+      let sc = 0;
+      for (const [k, v] of Object.entries(fx ?? {})) {
+        if (typeof v !== 'number') continue;
+        if (statKeys?.has?.(k)) sc += v * W.stat;
+        else if (k === 'money') sc += Math.sign(v) * Math.log10(1 + Math.abs(v)) * 3 * W.money;
+        else if (k === 'health') sc += v * 0.5 * W.health;
+        else if (k === 'karma' || k === 'fame' || k === 'merit') sc += v * W[k];
+        else if (k === 'qi') sc += v * 3 * W.qi;
+        else sc += v * W.other;
+      }
+      return sc;
+    };
+    const outScore = (o, W, statKeys) => {
+      if (!o) return 0;
+      let sc = fxScore(o.fx, W, statKeys);
+      let act = '';
+      try { act = String(JSON.stringify(o.act ?? {})); } catch { act = ''; }
+      if (DANGER_ACT.test(act)) sc -= 200;
+      return sc;
+    };
+    // outcome ที่มี fx หรือ act อย่างใดอย่างหนึ่งประเมินได้ (act ได้ 0 หรือติดลบถ้าอันตราย)
+    const hasResult = (o) => {
+      if (!o) return false;
+      const len = (x) => (x && typeof x === 'object' ? Object.keys(x).length : 0);
+      return len(o.fx) > 0 || len(o.act) > 0;
+    };
+    return { pick, IS, chunkChain, TIER_LBL, RAR_LBL, RAR_ORDER, tierOf, tierIdx, itemOrder, tierMatches, tierLabels, numOr, numOrKeep, isStateField, aiKey, fxScore, outScore, hasResult, chunkUrl, usableManifest, diffManifest, coreLoaded, keepTables, isStalePanel, EV_UNSUPPORTED, TABLES, STATE_REQUIRED, STATE_OPTIONAL, tableLines, stateLines, simLine, SIM_KEYS, simNames, absolutize, simPatch, importMapJson };
   })();
   // Node (เทส) โหลดไฟล์นี้แบบ CommonJS แล้วได้ LOC ทันทีโดยไม่แตะ DOM/localStorage
   if (typeof document === 'undefined') { module.exports = LOC; return; }
-  const VERSION = '3.4.3'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
+  const VERSION = '3.4.4'; // ต้องตรงกับ @version ด้านบน (tools/release.mjs ตรวจให้)
   const STATS = [['body', 'ร่างกาย'], ['mind', 'จิต'], ['will', 'ใจ'], ['charm', 'เสน่ห์'], ['luck', 'โชค']];
   let t = null, ITEMS = null, REALMS = null, TIERS = null, SIM = null, EVENTS = [];
   let simError = null; // เหตุผลที่ไม่มี sim (จาก window.__woxSimError หรือรอเกินเวลา); null = ยังรอ
@@ -987,25 +1018,8 @@
       safe: { stat: 0.8, health: 2.5, money: 0.8, karma: 0.5, fame: 0.5, qi: 0.4, merit: 0.3, other: 0.2, risk: 2 },
     };
     const STATKEYS = new Set(STATS.map(([k]) => k));
-    const fxScore = (fx, W) => {
-      let sc = 0;
-      for (const [k, v] of Object.entries(fx ?? {})) {
-        if (typeof v !== 'number') continue;
-        if (STATKEYS.has(k)) sc += v * W.stat;
-        else if (k === 'money') sc += Math.sign(v) * Math.log10(1 + Math.abs(v)) * 3 * W.money;
-        else if (k === 'health') sc += v * 0.5 * W.health;
-        else if (k === 'karma' || k === 'fame' || k === 'merit') sc += v * W[k];
-        else if (k === 'qi') sc += v * 3 * W.qi;
-        else sc += v * W.other;
-      }
-      return sc;
-    };
-    const outScore = (o, W) => {
-      if (!o) return 0;
-      let sc = fxScore(o.fx, W);
-      if (/die|death|kill|dead|perish/i.test(JSON.stringify(o.act ?? {}))) sc -= 200;
-      return sc;
-    };
+    // ตรรกะอยู่ใน LOC (มีเทส); ที่นี่มีแต่ค่าไว้เรียก
+    const outScore = (o, W) => LOC.outScore(o, W, STATKEYS);
     const aiCfg = () => ({ preset: $('ai_preset').value, mark: $('ai_mark').checked, auto: $('ai_auto').checked, delay: Math.max(200, +$('ai_delay').value || 1200) });
     $('ai_preset').value = store.get('ai.preset') || 'balanced';
     $('ai_mark').checked = store.get('ai.mark') !== '0';
@@ -1079,7 +1093,7 @@
           : outScore(opt.ok, W);
         const failS = opt.fail ? outScore(opt.fail, W) : 0;
         const fs = cfg.preset === 'safe' && failS < 0 ? failS * W.risk : failS;
-        const known0 = [opt.ok, opt.fail, ...(opt.outcomes ?? [])].some((v) => v && Object.keys(v.fx ?? {}).length);
+        const known0 = [opt.ok, opt.fail, ...(opt.outcomes ?? [])].some((v) => LOC.hasResult(v));
         rows.push({ b, sc: p * okS + (1 - p) * fs, p, blind: !known0 });
       }
       const known = rows.filter((r) => r.sc !== null);
