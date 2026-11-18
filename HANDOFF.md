@@ -94,7 +94,7 @@ node --check wox-editor.user.js && node --test "tests/**/*.test.mjs"
 - `docs/superpowers/specs/2026-11-18-audit-fixes-design.md`: สร้างใหม่ committed ที่ `640064e`
 - `CLAUDE.md` §7: เพิ่มกฎห้ามแยก subagent committed ที่ `640064e`
 - `docs/superpowers/plans/2026-11-18-audit-fixes.md`: สร้างใหม่ committed ที่ `cfe47e6`
-- `HANDOFF.md` (ไฟล์นี้): เขียนทับเวอร์ชัน 01:43 จะ commit ตามหลังไฟล์นี้
-- `journal/2026-11-18.md`: เพิ่มหัวข้อ design/แผน จะ commit พร้อมไฟล์นี้
+- `HANDOFF.md` (ไฟล์นี้): เขียนทับเวอร์ชัน 01:43 committed บน `audit/2026-11-18`
+- `journal/2026-11-18.md`: เพิ่มหัวข้อ design/แผน (โฟลเดอร์ `journal/` ถูก gitignore ไม่ขึ้น repo)
 - นอก repo: memory `no-subagents.md` ใน `C:\Users\PC\.claude\projects\C--Users-PC-Desktop-Wox-UI-way-of-xian-wox-game-workers-dev\memory\`
 - ไม่มีไฟล์โค้ดถูกแก้ ทั้ง `wox-editor.user.js`, `tests/` และ `tools/` ไม่เปลี่ยน
